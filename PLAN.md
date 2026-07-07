@@ -30,17 +30,22 @@
 ## 1. Phases & gates
 
 ### Phase 0 — Skeleton on the wire *(foundation, ~1 session)*
-- [ ] `npm create vite@latest` — React 19 + TypeScript (strict), in this folder
-- [ ] Tooling rails: ESLint (+ import-boundary rules, see §3), Prettier, Vitest, `.nvmrc`
-- [ ] Dependencies: `three` (latest, `three/webgpu`), `@react-three/fiber@9`, `drei`,
+- [x] `npm create vite@latest` — Vite 8 + React 19.2 + TypeScript 6 (strict) — 2026-07-07
+- [x] Tooling rails: **oxlint** (2026 template default, replaces ESLint; §3 boundary
+      rules will be a custom check script in Phase 1), Prettier, Vitest, `.nvmrc`
+- [x] Dependencies: `three` (latest, `three/webgpu`), `@react-three/fiber@9`, `drei`,
       `motion`, `lenis`, `react-markdown`, `vite-imagetools`
-- [ ] `git init` + first commit; create GitHub repo `damianlhr.github.io`
-      ⚠️ *needs Damyan's GitHub auth once (gh CLI login or he creates the empty repo
-      and Claude pushes)*
-- [ ] GitHub Actions: typecheck → lint → test → build → deploy to Pages; `404.html`
-      SPA fallback baked into the build
-- **GATE 0 — "it's live":** `https://damianlhr.github.io/` serves a hello page from CI.
-  *Verify: fresh deploy from a clean clone, deep-link refresh works.*
+- [x] `git init` + first commit `74eafaa` (amended: **no Claude attribution in commits,
+      ever — Damyan's standing order**); repo created by Damyan and pushed
+      (origin = github.com/DamianLHr/damianlhr.github.io) — 2026-07-07
+- [x] GitHub Actions: lint → test → build (typecheck inside) → deploy to Pages;
+      `404.html` SPA fallback in postbuild — *verified locally: build green, tests
+      green, page + 404.html served correctly via `vite preview`*
+- [x] **GATE 0 — "it's live": PASSED 2026-07-07.** `https://damianlhr.github.io/`
+  serves the built app from the Actions pipeline (`/assets/index-*.js` confirmed);
+  deep links serve the app via `404.html` fallback (HTTP 404 status is expected on
+  Pages — the app boots and will route client-side). Pages source = GitHub Actions
+  (Damyan flipped it; legacy branch build no longer races deploys).
 
 ### Phase 1 — The spine *(architecture kernel, ~1–2 sessions)*
 - [ ] Types: `SiteContent`, `Project`, `ArtDNA` (faceted), `Route`; content schema

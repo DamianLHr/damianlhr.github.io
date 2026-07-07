@@ -1,0 +1,117 @@
+.switcher {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.switcher-trigger {
+  font: inherit;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  color: var(--fg);
+  background: #16181d;
+  border: 1px solid color-mix(in srgb, var(--fg) 18%, transparent);
+  border-radius: 999px;
+  padding: 0.45rem 0.9rem;
+  cursor: pointer;
+  transition: transform 140ms var(--ease-out-strong);
+}
+
+.switcher-trigger:active {
+  transform: scale(0.97);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .switcher-trigger:hover {
+    border-color: var(--accent);
+  }
+}
+
+.switcher-trigger:focus-visible,
+.switcher-menu button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.switcher-menu {
+  list-style: none;
+  margin: 0;
+  padding: 0.35rem;
+  min-width: 16rem;
+  background: #16181d;
+  border: 1px solid color-mix(in srgb, var(--fg) 18%, transparent);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  transform-origin: bottom right;
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    opacity 150ms var(--ease-out-strong),
+    transform 150ms var(--ease-out-strong);
+}
+
+@starting-style {
+  .switcher-menu {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .switcher-menu {
+    transition: opacity 150ms ease;
+    transform: none;
+  }
+}
+
+.switcher-menu button {
+  font: inherit;
+  display: grid;
+  gap: 0.15rem;
+  width: 100%;
+  text-align: left;
+  color: var(--fg);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .switcher-menu button:hover {
+    background: color-mix(in srgb, var(--fg) 8%, transparent);
+  }
+}
+
+.switcher-menu button[aria-checked='true'] .switcher-name::after {
+  content: ' ●';
+  color: var(--accent);
+}
+
+.switcher-name {
+  font-size: 0.82rem;
+}
+
+.switcher-desc {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.shell-dead {
+  min-height: 100dvh;
+  display: grid;
+  place-content: center;
+  gap: 0.5rem;
+  text-align: center;
+  padding: 2rem;
+}
+
+.shell-dead a {
+  color: var(--accent);
+}

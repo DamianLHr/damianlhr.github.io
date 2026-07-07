@@ -1,0 +1,75 @@
+.debug {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.debug h1 {
+  font-size: 1.1rem;
+  margin: 0 0 0.25rem;
+  color: var(--accent);
+}
+
+.debug h2 {
+  font-size: 0.95rem;
+  margin: 2rem 0 0.5rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--fg) 20%, transparent);
+  padding-bottom: 0.25rem;
+}
+
+.debug p {
+  margin: 0.25rem 0;
+}
+
+.debug-dim {
+  color: var(--muted);
+}
+
+.debug-route code {
+  color: var(--accent);
+}
+
+.debug nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 0.75rem 0;
+}
+
+.debug a {
+  color: var(--fg);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.debug a[aria-current='page'] {
+  color: var(--accent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .debug a:hover {
+    color: var(--accent);
+  }
+}
+
+.debug a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.debug pre {
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fg) 12%, transparent);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.debug ul {
+  padding-left: 1.25rem;
+}
