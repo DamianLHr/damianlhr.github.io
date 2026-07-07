@@ -76,13 +76,22 @@ bootstrap the taste loop before heavy 3D investment.*
       palette underline language, real canvas-rendered Julia sets). All three tiles
       archived per his request at `design/style-tiles/` — B "ink etching" is a seed
       candidate for the `atlas` mood, C "spectral dive" for `singularity` moodwork.
-- [ ] Build all 5 routes; fractal assets (offline renders + tiny Julia/Mandelbrot
-      shader accents); fractal-tied text/button effects; reduced-motion variants
-- [ ] Motion pass (Motion; `review-animations` on every interaction)
-- [ ] Design QA (`taste-skill`, `minimalist-skill` pre-flight) + Claude preview
-      self-review (desktop/tablet/mobile, dark mode, console clean)
-- **GATE 2b — "floor approved":** Damyan reviews live `?theme=julia` on laptop +
-  phone; revision round(s) until sign-off. `julia` becomes the auto-resolution floor.
+- [x] All routes built (c9e68e9, live 2026-07-07): split landing, editorial CV with
+      proficiency→project cross-links, grouped projects index with per-project Julia
+      thumbnails (art-DNA identity via curated constant pool + slug hash), project
+      pages (masked fractal hero, spec grid, action buttons), interests bento with
+      fractal washes, fractal 404. Canvas renderer, no GPU. Self-hosted Space
+      Grotesk. Accent heated to **#ff6a00** on Damyan's "make the orange pop" note.
+- [x] Motion pass (CSS-only per emil rules: transform/opacity, strong ease-out,
+      ≤300ms, :active scale, entry stagger ≤160ms, reduced-motion fades; Motion lib
+      deliberately unused to keep the floor light)
+- [x] Design QA: taste-skill pre-flight applied (em/en dashes stripped from all
+      visible copy, eyebrow discipline, one locked accent, AA contrast on buttons);
+      preview self-review desktop + mobile, console clean; header fractal strips cut
+      (bad aspect for Julia sets), replaced with clean headlines
+- [~] **GATE 2b — "floor approved": awaiting Damyan.** julia is registered at
+      weight 20 and already auto-resolves for fresh visitors (drop the weight if it
+      should hide until sign-off). Review live on laptop + phone.
 
 ### Phase 3 — `singularity` tech spike *(de-risk the flagship, ~1–2 sessions)*
 *The dive is the highest-risk tech in the project — prove it before designing around it.*
