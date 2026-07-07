@@ -63,16 +63,19 @@
       round-trips, content integrity (slug uniqueness, proficiency cross-refs, link
       hygiene). Plus `scripts/check-boundaries.mjs` in CI: content/shared/themes/
       shell import separation is a build failure, not a convention.
-- [~] **GATE 1 — "the pattern works": built & self-verified 2026-07-07** (navigated
-      to /cv in `hold`, switched to `debug`, route + content survived; deep link,
-      mobile viewport, zero console errors — live at b86fdb6). **Awaiting Damyan's
-      review:** skim `/?theme=debug` for content correctness.
+- [x] **GATE 1 — PASSED 2026-07-07.** Self-verified (route + content survive theme
+      swaps, deep links, mobile, zero console errors). Damyan's one fix request:
+      switcher must be visible on the live site → `debug` made publicly listed
+      (`cac7614`); he then green-lit Phase 2.
 
 ### Phase 2 — `julia` floor theme *(first real face, ~2–3 sessions)*
 *Why first: universal floor = site becomes genuinely shippable; cheapest place to
 bootstrap the taste loop before heavy 3D investment.*
-- [ ] **Style tiles:** 2–3 static full-page mockups of the landing (fractal placement,
-      type, palette, effect language) → **GATE 2a: Damyan picks a direction**
+- [x] Style tiles shipped 2026-07-07; **GATE 2a PASSED: Damyan picked A — "obsidian
+      gallery"** (dark, ember accent `#ff5c1a`, Space Grotesk, split layout, fractal-
+      palette underline language, real canvas-rendered Julia sets). All three tiles
+      archived per his request at `design/style-tiles/` — B "ink etching" is a seed
+      candidate for the `atlas` mood, C "spectral dive" for `singularity` moodwork.
 - [ ] Build all 5 routes; fractal assets (offline renders + tiny Julia/Mandelbrot
       shader accents); fractal-tied text/button effects; reduced-motion variants
 - [ ] Motion pass (Motion; `review-animations` on every interaction)
