@@ -89,9 +89,15 @@ bootstrap the taste loop before heavy 3D investment.*
       visible copy, eyebrow discipline, one locked accent, AA contrast on buttons);
       preview self-review desktop + mobile, console clean; header fractal strips cut
       (bad aspect for Julia sets), replaced with clean headlines
-- [~] **GATE 2b — "floor approved": awaiting Damyan.** julia is registered at
-      weight 20 and already auto-resolves for fresh visitors (drop the weight if it
-      should hide until sign-off). Review live on laptop + phone.
+- [x] Revision round 1 (Damyan: "bigger landing fractal, animated/responsive, all
+      fractals respond to traversal, more fun; CV stays subdued") — shipped 2948aa8:
+      full-bleed morphing hero (pointer-follow with eased smoothing + ambient drift +
+      idle sharpening; low-res morph frames upscaled for 60fps CPU rendering),
+      traversal blooms on every fractal, hover morphs + scale on project thumbnails,
+      ember interior depth shading, coarse-pointer/battery and reduced-motion paths,
+      mobile recomposition. CV untouched.
+- [~] **GATE 2b — "floor approved": awaiting Damyan.** Review live on laptop + phone
+      (phone check matters: coarse pointers bloom then settle sharp).
 
 ### Phase 3 — `singularity` tech spike *(de-risk the flagship, ~1–2 sessions)*
 *The dive is the highest-risk tech in the project — prove it before designing around it.*
