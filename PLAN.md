@@ -109,14 +109,19 @@ bootstrap the taste loop before heavy 3D investment.*
 
 ### Phase 3 — `singularity` tech spike *(de-risk the flagship, ~1–2 sessions)*
 *The dive is the highest-risk tech in the project — prove it before designing around it.*
-- [ ] Prototype: real-time raymarched Mandelbulb (TSL, iquilez DE playbook §4F of
-      TECHNOLOGY.md), camera path *into* the bulb, palette re-color from route facets
-- [ ] Measure on real hardware: fps at DPR 1/1.5/2 on WebGPU; the same scene on forced
-      WebGL 2 (`forceWebGL: true`) with reduced steps/half-res
-- [ ] Decision memo written into TECHNOLOGY.md: what runs live vs. what gets
-      pre-rendered (Mandelbulber video loops) per tier
-- **GATE 3 — "the dive is real":** Damyan sees the prototype dive on his machine;
-  go/adjust decision on the singularity concept scope.
+- [x] Prototype SHIPPED (e375cdc, live at `?theme=spike`): power-8 Mandelbulb
+      raymarcher in TSL (WGSL on WebGPU, GLSL via `?webgl`), scroll-to-dive with
+      DE-scaled collision-aware speed (CPU mirror of the estimator), drag-look,
+      orbit-trap ember shading + AO + rim + fog + halo, route links recolor the bulb
+      live. Damyan's spike decisions: scroll-dive, beauty-at-60fps, ember base.
+- [~] Measure on real hardware — HUD shows fps/backend/resolution/surface-distance
+      with DPR buttons. First numbers (dev preview GPU, 1298×1075 WebGPU): ~240 fps
+      orbiting, ~228 fps deep in the folds. **Damyan's machine numbers pending
+      (WebGPU at each DPR + `?webgl` tier).**
+- [ ] Decision memo into TECHNOLOGY.md after Gate 3 numbers: live vs pre-rendered
+      per tier; fp32 depth limit noted (~4-6 orders of magnitude of dive).
+- [~] **GATE 3 — "the dive is real": awaiting Damyan** — dive it on his machine,
+  read the HUD numbers, go/adjust on singularity scope.
 
 ### Phase 4 — `singularity` full build *(the flagship, ~3–5 sessions)*
 - [ ] Art DNA design: per-project + per-route fractal params/palettes (Mandelbulber
