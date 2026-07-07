@@ -19,6 +19,11 @@ export function Root({ content, route, navigate }: ThemeProps) {
       <h1>{content.profile.name}</h1>
       <p className="hold-tagline">{content.profile.tagline}</p>
       <p className="hold-status">under construction — the interesting part is on its way</p>
+      {content.announcements.length > 0 && (
+        <p className="hold-upnext">
+          up next: {content.announcements.map((a) => a.title).join(' · ')}
+        </p>
+      )}
       <nav className="hold-sections" aria-label="Sections">
         {TOP_LEVEL_ROUTES.map((r) => (
           <a

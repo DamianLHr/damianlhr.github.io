@@ -88,10 +88,14 @@ export function Root({ content, route, navigate }: ThemeProps) {
           <Section title="profile">
             <Dump value={content.profile} />
           </Section>
+          <Section title="announcements (up next)">
+            <Dump value={content.announcements} />
+          </Section>
           <Section title="counts">
             <Dump
               value={{
                 projects: content.projects.length,
+                announcements: content.announcements.length,
                 educationEntries: content.cv.education.length,
                 experienceEntries: content.cv.experience.length,
                 interestSections: content.interests.length,

@@ -10,6 +10,8 @@ export interface JuliaParams {
   /** where the set is centered in the canvas, 0..1 (default 0.5/0.5) */
   centerX?: number
   centerY?: number
+  /** rotation of the set in radians (galaxy tilt) */
+  angle?: number
 }
 
 /** Curated constants that render well — indexed by content seed/slug so every
@@ -71,11 +73,15 @@ export function renderJulia(canvas: HTMLCanvasElement, params: JuliaParams, qual
   const scale = (params.span ?? 3.0) / Math.min(w, h)
   const cx = w * (params.centerX ?? 0.5)
   const cy = h * (params.centerY ?? 0.5)
+  const cosA = Math.cos(params.angle ?? 0)
+  const sinA = Math.sin(params.angle ?? 0)
   let p = 0
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      let zr = (x - cx) * scale
-      let zi = (y - cy) * scale
+      const dx = (x - cx) * scale
+      const dy = (y - cy) * scale
+      let zr = dx * cosA - dy * sinA
+      let zi = dx * sinA + dy * cosA
       let i = 0
       while (i < max && zr * zr + zi * zi < 16) {
         const t = zr * zr - zi * zi + re

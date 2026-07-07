@@ -96,8 +96,15 @@ bootstrap the taste loop before heavy 3D investment.*
       traversal blooms on every fractal, hover morphs + scale on project thumbnails,
       ember interior depth shading, coarse-pointer/battery and reduced-motion paths,
       mobile recomposition. CV untouched.
-- [~] **GATE 2b — "floor approved": awaiting Damyan.** Review live on laptop + phone
-      (phone check matters: coarse pointers bloom then settle sharp).
+- [x] Revision round 2 (Damyan: galaxy hero at ~45° TL→BR fading both sides, more
+      reactive, fix pixelation, whole-card hover, projects not-a-list, announcements
+      in all themes, personal on top): WebGL2 renderer (full-res 60fps; readback-
+      verified probe; CPU floor fallback + `?cpufractal` QA override), renderer
+      rotation param, hold-click dive, `Announcement` content type + ticker/panel in
+      julia/hold/debug, fractal-card mosaic with up-next panel on top. Docs written:
+      docs/ADDING-A-THEME.md + docs/ADDING-CONTENT.md. Standing rule recorded: every
+      theme must be special, never bland.
+- [~] **GATE 2b — "floor approved": awaiting Damyan.** Review live on laptop + phone.
 
 ### Phase 3 — `singularity` tech spike *(de-risk the flagship, ~1–2 sessions)*
 *The dive is the highest-risk tech in the project — prove it before designing around it.*

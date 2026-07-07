@@ -52,8 +52,8 @@ export function Home({ content, navigate }: { content: SiteContent; navigate: Na
       <FractalCanvas
         params={
           narrow
-            ? { ...ROUTE_C.home, span: 2.9, centerX: 0.5, centerY: 0.3 }
-            : { ...ROUTE_C.home, span: 2.6, centerX: 0.62, centerY: 0.48 }
+            ? { ...ROUTE_C.home, span: 2.7, centerX: 0.5, centerY: 0.32, angle: -0.7 }
+            : { ...ROUTE_C.home, span: 2.3, centerX: 0.54, centerY: 0.46, angle: -0.7 }
         }
         live="hero"
         className="j-home-canvas"
@@ -89,6 +89,14 @@ export function Home({ content, navigate }: { content: SiteContent; navigate: Na
           ))}
         </div>
       </div>
+      {content.announcements.length > 0 && (
+        <InternalLink to="/projects" navigate={navigate} className="j-ticker">
+          <span className="j-ticker-tag">Up next</span>
+          <span className="j-ticker-items">
+            {content.announcements.map((a) => a.title).join('  ·  ')}
+          </span>
+        </InternalLink>
+      )}
     </section>
   )
 }
@@ -169,56 +177,66 @@ export function Cv({ content, navigate }: { content: SiteContent; navigate: Nav 
   )
 }
 
-const CATEGORY_LABEL: Record<Project['category'], string> = {
-  personal: 'Personal',
-  jam: 'Game jams · team Kartof',
-  university: 'University',
+const CARD_SPAN: Record<string, number> = {
+  'dont-break-glass': 3,
+  'kill-bunny': 3,
+  'digital-twinning-suspension': 4,
+  'blood-of-hedon': 2,
+  'olympian-onslaught': 6,
+}
+
+const CHIP: Record<Project['category'], string> = {
+  personal: 'personal',
+  jam: 'game jam',
+  university: 'university',
 }
 
 export function ProjectsIndex({ content, navigate }: { content: SiteContent; navigate: Nav }) {
-  const categories: Project['category'][] = ['jam', 'university', 'personal']
+  const released = content.projects.filter((p) => p.status === 'released')
   return (
-    <section className="j-page j-enter">
+    <section className="j-page j-page-wide j-enter">
       <header className="j-page-head">
         <h1>Projects</h1>
       </header>
-      {categories.map((cat) => (
-        <div key={cat}>
-          <h2 className="j-h2">{CATEGORY_LABEL[cat]}</h2>
-          <ul className="j-project-list">
-            {content.projects
-              .filter((p) => p.category === cat)
-              .map((p) => (
-                <li key={p.slug} className={p.status === 'coming-soon' ? 'j-soon' : undefined}>
-                  <FractalCanvas params={projectC(p)} live="hover" className="j-thumb" />
-                  <div>
-                    {p.status === 'coming-soon' ? (
-                      <span className="j-project-title">{p.title}</span>
-                    ) : (
-                      <InternalLink
-                        to={`/projects/${p.slug}`}
-                        navigate={navigate}
-                        className="j-project-title"
-                      >
-                        {p.title}
-                      </InternalLink>
-                    )}
-                    <p className="j-meta">
-                      {[
-                        p.status === 'coming-soon' ? 'coming soon' : p.year,
-                        p.event,
-                        p.role,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </p>
-                    <p className="j-summary">{p.summary}</p>
-                  </div>
-                </li>
-              ))}
-          </ul>
+
+      <div className="j-upnext">
+        <p className="j-upnext-tag">Up next</p>
+        <div className="j-upnext-items">
+          {content.announcements.map((a) => (
+            <article key={a.id}>
+              <h2>{a.title}</h2>
+              <p>{a.body}</p>
+            </article>
+          ))}
         </div>
-      ))}
+      </div>
+
+      <div className="j-mosaic">
+        {released.map((p) => (
+          <InternalLink
+            key={p.slug}
+            to={`/projects/${p.slug}`}
+            navigate={navigate}
+            className={`j-card j-span-${CARD_SPAN[p.slug] ?? 3}`}
+          >
+            <FractalCanvas
+              params={{ ...projectC(p), span: 2.0, centerX: 0.64, centerY: 0.42 }}
+              live="hover"
+              hoverHost="a"
+              className="j-card-art"
+            />
+            <span className="j-card-scrim" aria-hidden="true" />
+            <span className="j-card-body">
+              <span className="j-chip">{CHIP[p.category]}</span>
+              <span className="j-card-title">{p.title}</span>
+              <span className="j-meta">
+                {[p.year, p.event, p.role].filter(Boolean).join(' · ')}
+              </span>
+              <span className="j-card-summary">{p.summary}</span>
+            </span>
+          </InternalLink>
+        ))}
+      </div>
     </section>
   )
 }

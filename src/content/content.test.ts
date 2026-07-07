@@ -61,6 +61,16 @@ describe('content integrity', () => {
     }
   })
 
+  it('has announcements every theme can surface', () => {
+    expect(content.announcements.length).toBeGreaterThanOrEqual(1)
+    const ids = content.announcements.map((a) => a.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    for (const a of content.announcements) {
+      expect(a.title.length).toBeGreaterThan(0)
+      expect(a.body.length).toBeGreaterThan(20)
+    }
+  })
+
   it('cv has education, experience and plans', () => {
     expect(content.cv.education.length).toBeGreaterThanOrEqual(2)
     expect(content.cv.experience.length).toBeGreaterThanOrEqual(2)

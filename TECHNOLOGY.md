@@ -402,6 +402,11 @@ just desktop.
 - New content must never require theme changes, and a new theme must never require
   content changes — if either happens, the contract (§3.2) is being violated; fix the
   contract, not the caller.
+- **Every theme must be special and interesting (Damyan's standing rule, 2026-07-07):**
+  decoupled content is never an excuse for a bland skin. Every theme surfaces the
+  "Up next" announcements on landing + projects. How-to guides:
+  [docs/ADDING-A-THEME.md](docs/ADDING-A-THEME.md) (build a new world) and
+  [docs/ADDING-CONTENT.md](docs/ADDING-CONTENT.md) (edit content, human-readable).
 - Verify WebGPU *and* forced-WebGL2 paths *and* every registered theme (at minimum the
   `julia` floor) in a real browser before every deploy (Chrome flag
   `--disable-features=WebGPU` or `forceWebGL: true` in Three.js; `?theme=<id>`).

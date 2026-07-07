@@ -112,10 +112,20 @@ export interface RouteArt {
   interests?: ArtDNA
 }
 
+/** Blog-style announcement about what is coming next. Every theme must surface
+ * these (at minimum on the landing and projects pages). */
+export interface Announcement {
+  id: string
+  title: string
+  body: string
+  links?: LinkRef[]
+}
+
 export interface SiteContent {
   profile: Profile
   cv: CV
   projects: Project[]
   interests: InterestSection[]
+  announcements: Announcement[]
   routeArt: RouteArt
 }
