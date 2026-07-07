@@ -15,6 +15,15 @@ export const themes: ThemeDescriptor[] = [
     load: () => import('./julia'),
   },
   {
+    id: 'spike',
+    name: 'Singularity (spike)',
+    description: 'Phase 3 prototype: dive into a raymarched Mandelbulb. Expect sharp edges.',
+    requirements: { webgl2: true },
+    weight: -2,
+    listed: true,
+    load: () => import('./spike'),
+  },
+  {
     id: 'hold',
     name: 'Holding page',
     description: 'Minimal placeholder world while the real themes are built.',

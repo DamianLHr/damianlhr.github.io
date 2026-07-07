@@ -104,7 +104,8 @@ bootstrap the taste loop before heavy 3D investment.*
       julia/hold/debug, fractal-card mosaic with up-next panel on top. Docs written:
       docs/ADDING-A-THEME.md + docs/ADDING-CONTENT.md. Standing rule recorded: every
       theme must be special, never bland.
-- [~] **GATE 2b — "floor approved": awaiting Damyan.** Review live on laptop + phone.
+- [x] **GATE 2b — PASSED 2026-07-07.** Damyan: "I like the julia theme now." julia is
+      the approved floor and default.
 
 ### Phase 3 — `singularity` tech spike *(de-risk the flagship, ~1–2 sessions)*
 *The dive is the highest-risk tech in the project — prove it before designing around it.*
