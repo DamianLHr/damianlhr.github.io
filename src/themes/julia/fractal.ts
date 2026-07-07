@@ -7,6 +7,9 @@ export interface JuliaParams {
   /** viewport scale, higher = more zoomed out (default 3.0) */
   span?: number
   maxIter?: number
+  /** where the set is centered in the canvas, 0..1 (default 0.5/0.5) */
+  centerX?: number
+  centerY?: number
 }
 
 /** Curated constants that render well — indexed by content seed/slug so every
@@ -52,23 +55,27 @@ function ember(v: number): [number, number, number] {
   return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f]
 }
 
-export function renderJulia(canvas: HTMLCanvasElement, params: JuliaParams): void {
-  const dpr = Math.min(window.devicePixelRatio || 1, 1.25)
+/** Renders the set. `quality` scales the internal resolution (1 = crisp, ~0.3 =
+ * fast morph frame that the browser upscales — used while animating). */
+export function renderJulia(canvas: HTMLCanvasElement, params: JuliaParams, quality = 1): void {
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.25) * quality
   const rect = canvas.getBoundingClientRect()
   if (rect.width === 0 || rect.height === 0) return
-  const w = (canvas.width = Math.round(rect.width * dpr))
-  const h = (canvas.height = Math.round(rect.height * dpr))
+  const w = (canvas.width = Math.max(2, Math.round(rect.width * dpr)))
+  const h = (canvas.height = Math.max(2, Math.round(rect.height * dpr)))
   const ctx = canvas.getContext('2d')
   if (!ctx) return
   const img = ctx.createImageData(w, h)
   const { re, im } = params
   const max = params.maxIter ?? 150
   const scale = (params.span ?? 3.0) / Math.min(w, h)
+  const cx = w * (params.centerX ?? 0.5)
+  const cy = h * (params.centerY ?? 0.5)
   let p = 0
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      let zr = (x - w / 2) * scale
-      let zi = (y - h / 2) * scale
+      let zr = (x - cx) * scale
+      let zi = (y - cy) * scale
       let i = 0
       while (i < max && zr * zr + zi * zi < 16) {
         const t = zr * zr - zi * zi + re
@@ -78,7 +85,9 @@ export function renderJulia(canvas: HTMLCanvasElement, params: JuliaParams): voi
       }
       let c: [number, number, number]
       if (i === max) {
-        c = [8, 8, 9]
+        // interior: faint ember-tinged depth instead of a flat void
+        const v2 = Math.min(4, zr * zr + zi * zi)
+        c = [14 + v2 * 9, 8 + v2 * 3, 9 + v2 * 1.5]
       } else {
         c = ember(((i - Math.log2(Math.log2(zr * zr + zi * zi))) / max) * 2.2)
       }

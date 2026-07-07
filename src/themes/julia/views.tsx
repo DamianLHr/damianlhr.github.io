@@ -46,8 +46,19 @@ function projectC(project: Project): JuliaParams {
 }
 
 export function Home({ content, navigate }: { content: SiteContent; navigate: Nav }) {
+  const narrow = window.matchMedia('(max-width: 760px)').matches
   return (
     <section className="j-home">
+      <FractalCanvas
+        params={
+          narrow
+            ? { ...ROUTE_C.home, span: 2.9, centerX: 0.5, centerY: 0.3 }
+            : { ...ROUTE_C.home, span: 2.6, centerX: 0.62, centerY: 0.48 }
+        }
+        live="hero"
+        className="j-home-canvas"
+      />
+      <div className="j-home-scrim" aria-hidden="true" />
       <div className="j-home-copy j-enter">
         <p className="j-eyebrow">{content.profile.tagline}</p>
         <h1 className="j-title">
@@ -77,9 +88,6 @@ export function Home({ content, navigate }: { content: SiteContent; navigate: Na
             </a>
           ))}
         </div>
-      </div>
-      <div className="j-home-art">
-        <FractalCanvas params={ROUTE_C.home} className="j-canvas" />
       </div>
     </section>
   )
@@ -182,7 +190,7 @@ export function ProjectsIndex({ content, navigate }: { content: SiteContent; nav
               .filter((p) => p.category === cat)
               .map((p) => (
                 <li key={p.slug} className={p.status === 'coming-soon' ? 'j-soon' : undefined}>
-                  <FractalCanvas params={projectC(p)} className="j-thumb" />
+                  <FractalCanvas params={projectC(p)} live="hover" className="j-thumb" />
                   <div>
                     {p.status === 'coming-soon' ? (
                       <span className="j-project-title">{p.title}</span>
@@ -241,7 +249,7 @@ export function ProjectPage({
       <header className="j-page-head">
         <h1>{project.title}</h1>
       </header>
-      <FractalCanvas params={{ ...projectC(project), span: 2.1 }} className="j-hero" />
+      <FractalCanvas params={{ ...projectC(project), span: 2.1 }} live="bloom" className="j-hero" />
       <dl className="j-facts">
         {facts.map(([k, v]) => (
           <div key={k}>
@@ -277,6 +285,7 @@ export function Interests({ content }: { content: SiteContent }) {
           <article className="j-interest" key={section.id}>
             <FractalCanvas
               params={{ ...paramsFor(section.id, i * 3 + 1), maxIter: 90 }}
+              live="bloom"
               className="j-interest-wash"
             />
             <h2>{section.title}</h2>
@@ -296,7 +305,7 @@ export function Interests({ content }: { content: SiteContent }) {
 export function NotFound({ path, navigate }: { path: string; navigate: Nav }) {
   return (
     <section className="j-page j-enter j-404">
-      <FractalCanvas params={{ ...ROUTE_C.notFound, span: 2.1 }} className="j-hero" />
+      <FractalCanvas params={{ ...ROUTE_C.notFound, span: 2.1 }} live="bloom" className="j-hero" />
       <h1>Nothing at this address</h1>
       <p className="j-meta">{path} escaped the set.</p>
       <InternalLink to="/" navigate={navigate} className="j-btn j-btn-primary">

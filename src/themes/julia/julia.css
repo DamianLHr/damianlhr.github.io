@@ -78,15 +78,36 @@
 /* ---------- home ---------- */
 
 .j-home {
+  position: relative;
   display: grid;
-  grid-template-columns: 1.1fr 1fr;
+  align-content: center;
   min-height: calc(100dvh - 64px);
+  overflow: hidden;
+}
+
+.j-home-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.j-home-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, var(--j-bg) 0%, rgba(10, 11, 13, 0.88) 30%, rgba(10, 11, 13, 0.3) 55%, transparent 78%),
+    radial-gradient(130% 100% at 62% 48%, transparent 60%, var(--j-bg) 100%);
 }
 
 .j-home-copy {
+  position: relative;
+  z-index: 1;
   display: grid;
   align-content: center;
   gap: 1.4rem;
+  max-width: 40rem;
   padding: clamp(1.5rem, 5vw, 5rem);
 }
 
@@ -186,26 +207,6 @@
   .j-out:hover {
     color: var(--j-accent-soft);
   }
-}
-
-.j-home-art {
-  position: relative;
-  min-height: calc(100dvh - 64px);
-}
-
-.j-home-art .j-canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.j-home-art::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(120% 90% at 70% 45%, transparent 55%, var(--j-bg) 100%);
-  pointer-events: none;
 }
 
 /* ---------- inner pages ---------- */
@@ -316,6 +317,13 @@
   width: 84px;
   height: 84px;
   border-radius: 6px;
+  transition: transform 200ms var(--ease-out-strong);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .j-project-list li:hover .j-thumb {
+    transform: scale(1.05);
+  }
 }
 
 .j-soon {
@@ -591,14 +599,16 @@ a.j-project-title::after {
 
 @media (max-width: 760px) {
   .j-home {
-    grid-template-columns: 1fr;
+    align-content: end;
   }
-  .j-home-art {
-    order: -1;
-    min-height: 38dvh;
+  .j-home-scrim {
+    background:
+      linear-gradient(to top, var(--j-bg) 0%, rgba(10, 11, 13, 0.82) 34%, rgba(10, 11, 13, 0.2) 62%, transparent 85%),
+      radial-gradient(140% 110% at 50% 30%, transparent 55%, var(--j-bg) 100%);
   }
   .j-home-copy {
-    padding-top: 1.6rem;
+    padding-top: 42dvh;
+    padding-bottom: 2.2rem;
   }
   .j-interests {
     grid-template-columns: 1fr;

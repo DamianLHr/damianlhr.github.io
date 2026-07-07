@@ -12,13 +12,13 @@ export const cv: CV = {
     },
     {
       school: 'National Gymnasium of Natural Sciences and Mathematics "Academician Lyubomir Chakalov"',
-      program: 'Secondary education — Mathematics & Informatics major with German',
+      program: 'Secondary education: Mathematics & Informatics major with German',
       location: 'Sofia, Bulgaria',
       start: '2019-09',
       end: '2024-05',
       details: [
         'Mathematics & Informatics major class with German language.',
-        'Additional specialization in Information Technologies (10th–12th grade).',
+        'Additional specialization in Information Technologies (10th to 12th grade).',
         'State Baccalaureate Examination in Advanced Mathematics (20.05.2024).',
       ],
     },
