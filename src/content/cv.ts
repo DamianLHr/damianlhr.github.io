@@ -49,7 +49,7 @@ export const cv: CV = {
       end: '2022-07',
       tools: ['Google Analytics', 'JavaScript', 'git'],
       summary:
-        'Internship at INDEAVR, Sofia — an IT outsourcing provider serving many Fortune 2000 companies.',
+        'Internship at INDEAVR in Sofia, an IT outsourcing provider serving many Fortune 2000 companies.',
       highlights: [
         "Made numerous client companies' sites GDPR-compliant by setting up their cookie consent.",
         "Helped migrate the department's wiki, working with in-house libraries, git, and Microsoft tooling.",

@@ -6,6 +6,15 @@ import type { ThemeDescriptor } from '../shared/theme-contract'
 
 export const themes: ThemeDescriptor[] = [
   {
+    id: 'julia',
+    name: 'Julia',
+    description: '2D fractal gallery — obsidian, ember, real Julia sets. The universal floor.',
+    requirements: {},
+    weight: 20,
+    listed: true,
+    load: () => import('./julia'),
+  },
+  {
     id: 'hold',
     name: 'Holding page',
     description: 'Minimal placeholder world while the real themes are built.',

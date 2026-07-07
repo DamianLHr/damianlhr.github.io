@@ -4,19 +4,19 @@ export const interests: InterestSection[] = [
   {
     id: 'books',
     title: 'Books',
-    body: 'Favourite book series — details coming soon.',
+    body: 'Favourite book series. Details coming soon.',
     links: [],
   },
   {
     id: 'gaming',
     title: 'Gaming',
-    body: 'Favourite games — details coming soon.',
+    body: 'Favourite games. Details coming soon.',
     links: [{ label: 'Steam profile', url: 'https://steamcommunity.com/id/damianlhr/' }],
   },
   {
     id: 'skiing',
     title: 'Skiing',
-    body: 'A long-running background on the slopes — story coming soon.',
+    body: 'A long-running background on the slopes. Story coming soon.',
     links: [],
   },
   {

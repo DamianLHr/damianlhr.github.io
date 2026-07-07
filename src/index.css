@@ -3,7 +3,7 @@
   --bg: #0b0d10;
   --fg: #e8e6e3;
   --muted: #8a8f98;
-  --accent: #ff5c1a;
+  --accent: #ff6a00;
   /* strong ease-out for UI interactions (emil-design-eng) */
   --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
 }

@@ -59,7 +59,7 @@ export const projects: Project[] = [
     event: 'GMTK Game Jam 2026',
     team: { name: 'Kartof' },
     tools: [],
-    summary: 'Team Kartof rides again — very soon.',
+    summary: 'Team Kartof rides again, very soon.',
     links: [],
   },
   {
@@ -94,7 +94,7 @@ export const projects: Project[] = [
     team: { size: 6 },
     tools: ['Java 21', 'Maven', 'JUnit 5'],
     summary:
-      'A roguelike gladiator game with turn-based, card-driven combat in a hand-drawn Roman arena (~35 cards, 4 gladiator classes, a mythological bestiary) — running on a custom game engine built from scratch: fixed-timestep loop, layered renderer, spatial-grid collision, event buses, Unity-style component model.',
+      'A roguelike gladiator game with turn-based, card-driven combat in a hand-drawn Roman arena (~35 cards, 4 gladiator classes, a mythological bestiary), running on a custom game engine built from scratch: fixed-timestep loop, layered renderer, spatial-grid collision, event buses, Unity-style component model.',
     links: [
       {
         label: 'Download the game (JAR, GitHub Releases)',
@@ -114,7 +114,7 @@ export const projects: Project[] = [
     team: { size: 2 },
     tools: ['Java 21', 'Swing'],
     summary:
-      'A top-down survival roguelite in a Greek-mythology world: as Achilles, survive five minutes of monster waves with auto-firing weapons; maxed weapon–ability pairs fuse into evolutions like the Exploding Bow and Lightning Axe. Built on a custom Java/Swing engine written from scratch.',
+      'A top-down survival roguelite in a Greek-mythology world: as Achilles, survive five minutes of monster waves with auto-firing weapons; maxed weapon and ability pairs fuse into evolutions like the Exploding Bow and Lightning Axe. Built on a custom Java/Swing engine written from scratch.',
     links: [{ label: 'Repository', url: 'https://github.com/DamianLHr/Olympian-Onslaught' }],
   },
 ]
