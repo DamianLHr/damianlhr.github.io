@@ -20,7 +20,7 @@ export const themes: ThemeDescriptor[] = [
     description: 'Raw content & route inspector — proves the content ⇄ theme decoupling.',
     requirements: {},
     weight: -1,
-    listed: import.meta.env.DEV,
+    listed: true,
     load: () => import('./debug'),
   },
 ]

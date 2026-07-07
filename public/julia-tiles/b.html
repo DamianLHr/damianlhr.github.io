@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Style tile B · Ink etching</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper: #f6f6f3;
+    --ink: #17181c;
+    --muted: #6d7076;
+    --accent: #2742ec;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { min-height: 100dvh; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Archivo', system-ui, sans-serif;
+  }
+  .tile {
+    min-height: 100dvh;
+    display: grid;
+    grid-template-columns: 1.25fr 1fr;
+    gap: clamp(1.5rem, 4vw, 4rem);
+    padding: clamp(1.5rem, 4vw, 4rem);
+    align-items: center;
+  }
+  h1 {
+    font-size: clamp(2.8rem, 7vw, 5.2rem);
+    font-weight: 800;
+    letter-spacing: -0.035em;
+    line-height: 0.98;
+    text-transform: uppercase;
+  }
+  .sub {
+    margin-top: 1.1rem;
+    color: var(--muted);
+    max-width: 42ch;
+    line-height: 1.55;
+  }
+  .index {
+    margin-top: 2.2rem;
+    display: grid;
+    gap: 0.65rem;
+    max-width: 30rem;
+  }
+  .index a {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    color: var(--ink);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 1.15rem;
+  }
+  .index a .leader {
+    flex: 1;
+    border-bottom: 1.5px dotted color-mix(in srgb, var(--ink) 35%, transparent);
+    transform: translateY(-0.28em);
+  }
+  .index a .go { font-family: 'IBM Plex Mono', monospace; font-size: 0.9rem; color: var(--accent); }
+  .index a.hover-sample { color: var(--accent); }
+  .index a.hover-sample .leader { border-color: var(--accent); }
+  .hint { margin-top: 0.7rem; font-size: 0.72rem; color: var(--muted); }
+  .socials {
+    margin-top: 2rem;
+    display: flex;
+    gap: 1.4rem;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.8rem;
+  }
+  .socials a { color: var(--muted); text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
+  .plate {
+    justify-self: end;
+    width: 100%;
+    max-width: 30rem;
+  }
+  .plate-frame {
+    border: 1.5px solid var(--ink);
+    padding: 0.6rem;
+    background: var(--paper);
+  }
+  canvas { display: block; width: 100%; aspect-ratio: 4 / 5; }
+  .caption {
+    margin-top: 0.55rem;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+  .caption b { color: var(--accent); font-weight: 500; }
+  .label {
+    position: fixed;
+    left: 1rem; bottom: 0.8rem;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--muted);
+  }
+  @media (max-width: 820px) {
+    .tile { grid-template-columns: 1fr; padding-top: 2.2rem; }
+    .plate { justify-self: start; }
+  }
+</style>
+</head>
+<body>
+<main class="tile">
+  <section>
+    <h1>Damyan<br />Hristov</h1>
+    <p class="sub">Portfolio Blog. Games, engines and experimental graphics, studied at TU/e and practiced everywhere else.</p>
+    <nav class="index" aria-label="Sections">
+      <a href="#">CV <span class="leader"></span><span class="go">&rarr;</span></a>
+      <a href="#" class="hover-sample">Projects <span class="leader"></span><span class="go">&rarr;</span></a>
+      <a href="#">Interests <span class="leader"></span><span class="go">&rarr;</span></a>
+    </nav>
+    <p class="hint">middle entry shown in hover state: ink turns cobalt along the dotted leader</p>
+    <div class="socials">
+      <a href="#">GitHub</a><a href="#">itch.io</a><a href="#">Steam</a><a href="#">Spotify</a>
+    </div>
+  </section>
+  <figure class="plate">
+    <div class="plate-frame">
+      <canvas id="c"></canvas>
+    </div>
+    <figcaption class="caption">julia set, contour etching · <b>c = -0.8 + 0.156i</b> · rendered in this page</figcaption>
+  </figure>
+</main>
+<p class="label">style tile B · ink etching</p>
+<script>
+  const cv = document.getElementById('c');
+  function render() {
+    const dpr = Math.min(devicePixelRatio || 1, 1.5);
+    const r = cv.getBoundingClientRect();
+    const w = cv.width = Math.round(r.width * dpr);
+    const h = cv.height = Math.round(r.height * dpr);
+    const ctx = cv.getContext('2d');
+    const img = ctx.createImageData(w, h);
+    const paper = [246, 246, 243], ink = [23, 24, 28], cobalt = [39, 66, 236];
+    const cr = -0.8, ci = 0.156, max = 180, scale = 3.1 / Math.min(w, h);
+    let p = 0;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let zr = (x - w / 2) * scale, zi = (y - h / 2) * scale, i = 0;
+        while (i < max && zr * zr + zi * zi < 16) {
+          const t = zr * zr - zi * zi + cr;
+          zi = 2 * zr * zi + ci; zr = t; i++;
+        }
+        let c = paper;
+        if (i === max) {
+          c = ink;
+        } else {
+          const v = (i - Math.log2(Math.log2(zr * zr + zi * zi))) / max;
+          const band = v * 30;
+          if (band % 1 < 0.16 && v > 0.02) {
+            c = Math.floor(band) % 7 === 0 ? cobalt : ink;
+          }
+        }
+        img.data[p++] = c[0]; img.data[p++] = c[1]; img.data[p++] = c[2]; img.data[p++] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+  let rt;
+  addEventListener('load', render);
+  addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(render, 150); });
+  render();
+</script>
+</body>
+</html>

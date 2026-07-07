@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Style tile C · Spectral dive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #07080a;
+    --fg: #f2efe9;
+    --muted: #9aa0a8;
+    --accent: #ffb454;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { min-height: 100dvh; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: system-ui, sans-serif;
+    overflow: hidden;
+  }
+  .art {
+    position: fixed;
+    inset: -6%;
+    z-index: 0;
+  }
+  canvas { width: 100%; height: 100%; display: block; animation: drift 70s linear infinite alternate; }
+  @keyframes drift {
+    from { transform: scale(1) translateY(0); }
+    to { transform: scale(1.16) translateY(-2.5%); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    canvas { animation: none; }
+  }
+  .scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    background: linear-gradient(to top, rgba(7,8,10,0.94) 0%, rgba(7,8,10,0.55) 38%, rgba(7,8,10,0) 70%);
+  }
+  .copy {
+    position: fixed;
+    z-index: 2;
+    left: clamp(1.2rem, 5vw, 4.5rem);
+    right: clamp(1.2rem, 5vw, 4.5rem);
+    bottom: clamp(1.6rem, 6vh, 4rem);
+    display: grid;
+    gap: 1rem;
+  }
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: clamp(2.8rem, 8vw, 6rem);
+    line-height: 0.95;
+    letter-spacing: -0.02em;
+    background: linear-gradient(100deg, var(--fg) 30%, var(--accent) 75%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    width: fit-content;
+  }
+  .sub { color: var(--muted); max-width: 44ch; line-height: 1.5; }
+  .sub b { color: var(--accent); font-weight: 600; }
+  nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    margin-top: 0.4rem;
+  }
+  nav a {
+    color: var(--fg);
+    text-decoration: none;
+    font-size: 0.95rem;
+    border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+    border-radius: 999px;
+    padding: 0.55rem 1.15rem;
+  }
+  nav a.hover-sample {
+    background: var(--accent);
+    color: #201405;
+    font-weight: 600;
+  }
+  .hint { font-size: 0.72rem; color: var(--muted); }
+  .socials { display: flex; gap: 1.3rem; font-size: 0.82rem; }
+  .socials a { color: var(--muted); text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
+  .label {
+    position: fixed;
+    right: 1rem; bottom: 0.8rem;
+    z-index: 2;
+    font-size: 0.68rem;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+  }
+</style>
+</head>
+<body>
+<div class="art" aria-label="Julia set artwork"><canvas id="c"></canvas></div>
+<div class="scrim"></div>
+<main class="copy">
+  <h1>Damyan Hristov</h1>
+  <p class="sub"><b>Portfolio Blog.</b> Games, engines and experimental graphics. The art breathes: it slowly dives deeper into the set.</p>
+  <nav aria-label="Sections">
+    <a href="#">CV</a>
+    <a href="#" class="hover-sample">Projects</a>
+    <a href="#">Interests</a>
+  </nav>
+  <p class="hint">middle pill shown in hover state: amber fill, dark text</p>
+  <div class="socials">
+    <a href="#">GitHub</a><a href="#">itch.io</a><a href="#">Steam</a><a href="#">Spotify</a>
+  </div>
+</main>
+<p class="label">style tile C · spectral dive · real Julia set, c = 0.285 + 0.01i</p>
+<script>
+  const cv = document.getElementById('c');
+  function render() {
+    const dpr = Math.min(devicePixelRatio || 1, 1.25);
+    const r = cv.getBoundingClientRect();
+    const w = cv.width = Math.round(r.width * dpr);
+    const h = cv.height = Math.round(r.height * dpr);
+    const ctx = cv.getContext('2d');
+    const img = ctx.createImageData(w, h);
+    const cr = 0.285, ci = 0.01, max = 160, scale = 2.4 / Math.min(w, h);
+    let p = 0;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let zr = (x - w / 2) * scale, zi = (y - h / 2) * scale, i = 0;
+        while (i < max && zr * zr + zi * zi < 16) {
+          const t = zr * zr - zi * zi + cr;
+          zi = 2 * zr * zi + ci; zr = t; i++;
+        }
+        if (i === max) {
+          img.data[p++] = 5; img.data[p++] = 6; img.data[p++] = 8; img.data[p++] = 255;
+        } else {
+          const v = Math.min(1, (i - Math.log2(Math.log2(zr * zr + zi * zi))) / max * 2.6);
+          const hDeg = 195 + v * 215;
+          const s = 0.72, l = 0.06 + v * 0.5;
+          const a2 = s * Math.min(l, 1 - l);
+          const f = (n) => {
+            const k = (n + hDeg / 30) % 12;
+            return l - a2 * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+          };
+          img.data[p++] = f(0) * 255; img.data[p++] = f(8) * 255; img.data[p++] = f(4) * 255; img.data[p++] = 255;
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+  let rt;
+  addEventListener('load', render);
+  addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(render, 150); });
+  render();
+</script>
+</body>
+</html>

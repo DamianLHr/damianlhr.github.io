@@ -48,19 +48,25 @@
   (Damyan flipped it; legacy branch build no longer races deploys).
 
 ### Phase 1 — The spine *(architecture kernel, ~1–2 sessions)*
-- [ ] Types: `SiteContent`, `Project`, `ArtDNA` (faceted), `Route`; content schema
-      validation that **fails the build** on bad/missing content
-- [ ] Transcribe CONTENT.md → `src/content/*.ts` (typed, markdown bodies as strings)
-- [ ] Theme contract: `ThemeDescriptor` / `ThemeModule`; registry; resolver
-      (URL param → localStorage → capability probe → weight); boot shell < 50 KB gz
-      with switcher overlay + a11y basics; micro-router (stable routes across themes)
-- [ ] **`debug` theme** (dev-only, weight −1): plain HTML dump of all content on all
-      routes — proves decoupling, doubles as the content-QA surface forever
-- [ ] Unit tests: resolver decision table (webgpu/webgl2/reduced-motion/saveData
-      combinations), router, content integrity (every project has year/role/links,
-      art-DNA references resolve)
-- **GATE 1 — "the pattern works":** switch debug-theme instances mid-navigation;
-  route + content survive. Damyan skims the debug dump for content correctness.
+- [x] Types: `SiteContent`, `Project`, `ArtDNA` (faceted), `Route` — content-integrity
+      tests fail CI on bad/missing content (src/content/content.test.ts)
+- [x] CONTENT.md transcribed → `src/content/{meta,cv,projects,interests}.ts` (typed)
+- [x] Theme contract (`shared/theme-contract.ts`) + registry + pure resolver
+      (?theme= → localStorage → capability probe → weight) + boot shell with
+      switcher overlay (skill-guided: 150ms strong ease-out, origin-aware menu,
+      :active scale, reduced-motion honored) + history micro-router.
+      Error boundary kicks a crashed theme down to the floor. Main bundle 66 KB gz;
+      each theme is its own ~1 KB chunk.
+- [x] `hold` theme (public placeholder, weight 10) + **`debug` theme** (weight −1,
+      unlisted in prod but reachable via `?theme=debug`) — the content-QA surface
+- [x] Unit tests: 26 passing — resolver decision table, route parse/format
+      round-trips, content integrity (slug uniqueness, proficiency cross-refs, link
+      hygiene). Plus `scripts/check-boundaries.mjs` in CI: content/shared/themes/
+      shell import separation is a build failure, not a convention.
+- [~] **GATE 1 — "the pattern works": built & self-verified 2026-07-07** (navigated
+      to /cv in `hold`, switched to `debug`, route + content survived; deep link,
+      mobile viewport, zero console errors — live at b86fdb6). **Awaiting Damyan's
+      review:** skim `/?theme=debug` for content correctness.
 
 ### Phase 2 — `julia` floor theme *(first real face, ~2–3 sessions)*
 *Why first: universal floor = site becomes genuinely shippable; cheapest place to
