@@ -114,6 +114,20 @@ bootstrap the taste loop before heavy 3D investment.*
       DE-scaled collision-aware speed (CPU mirror of the estimator), drag-look,
       orbit-trap ember shading + AO + rim + fog + halo, route links recolor the bulb
       live. Damyan's spike decisions: scroll-dive, beauty-at-60fps, ember base.
+- [x] Art + formula upgrade (2026-07-08, Damyan's direction): fractal switched to
+      **BoxFoldBulbPow2** (Mandelbulber foldingIntPow: mandelbox box/sphere folds →
+      quadratic bulb; cheaper per iteration than the trig power-8). Set probed at
+      radius ≈1.3 with false far-field attractors — estimator answers bounding-
+      sphere distance outside r=1.6. Black→fire ramp from route palette (measured
+      trap median 3.25 drives heat + radial geode gradient), warm key light with
+      soft raymarched shadows, cool fill, heat-gated spec/fresnel (cold obsidian
+      stays matte), crevice embers, clamped volumetric glow, distance fog, ACES-ish
+      tonemap + vignette. Default pose at the shell mouth (fire mandala). Perf:
+      fps-driven adaptive resolution (0.55×–DPR cap; manual HUD buttons override),
+      bounding-sphere ray clip. QA params: `?cam=x,y,z` `?yaw=` `?pitch=` `?ff=`
+      `?zf=` `?dbg=hit|heat|ao|trap|base|embers|glow|lit`. Dev-preview GPU:
+      ~240 fps WebGPU and ~230 fps forced-WebGL2 at 1298×1493, ~90–160 fps deep
+      in dense interior views.
 - [~] Measure on real hardware — HUD shows fps/backend/resolution/surface-distance
       with DPR buttons. First numbers (dev preview GPU, 1298×1075 WebGPU): ~240 fps
       orbiting, ~228 fps deep in the folds. **Damyan's machine numbers pending

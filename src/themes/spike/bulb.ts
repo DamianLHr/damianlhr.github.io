@@ -1,8 +1,11 @@
-// Phase 3 spike: real-time raymarched Mandelbulb in Three.js TSL.
+// Phase 3→4 spike: real-time raymarched BoxFoldBulbPow2 (Mandelbulber's
+// foldingIntPow formula: mandelbox folds feeding a quadratic bulb) in Three.js TSL.
 // One shader → WGSL on WebGPU, GLSL on WebGL 2 (?webgl forces the fallback tier).
 // Scroll dives: camera speed scales with the distance estimator, so you glide into
-// the folds without clipping. Beauty-at-60fps scope: orbit-trap palette, AO, rim,
-// fog and near-miss glow.
+// the folds without clipping. Look: black→fire ramp, warm key with soft shadows,
+// cool fill, crevice embers, volumetric glow, fog. Resolution adapts to hold fps.
+//
+// Tuning QA params: ?ff=<foldFactor> ?zf=<zFactor> (defaults 1.0 / 1.0)
 
 import * as THREE from 'three/webgpu'
 import {
@@ -10,25 +13,21 @@ import {
   Fn,
   If,
   Loop,
-  acos,
-  atan,
   clamp,
-  cos,
   dot,
   exp,
   float,
-  length,
   log,
   max,
   min,
   mix,
   normalize,
   pow,
-  sin,
+  reflect,
   smoothstep,
+  sqrt,
   uniform,
   uv,
-  vec2,
   vec3,
   vec4,
 } from 'three/tsl'
@@ -46,30 +45,69 @@ export interface Bulb {
   dispose: () => void
 }
 
-const POWER = 8
-const DE_ITER = 9
-const MARCH_STEPS = 110
+const DE_ITER = 12
+const MARCH_STEPS = 96
+const SHADOW_STEPS = 20
+const BOUND_R = 1.6 // bounding sphere around the set (probed set radius ≈ 1.3)
+const SET_R = 1.3
+// sphere fold radii fR2=1.0, mR2=0.25 → branchless factor = clamp(1/r², 1, fR2/mR2=4)
+// Outside BOUND_R the iteration has false attractors (orbits cycle below bailout and
+// the log-DE collapses to 0), so the estimator answers with the bounding-sphere
+// distance out there instead of iterating.
+
+function urlNum(key: string, fallback: number): number {
+  const v = new URLSearchParams(window.location.search).get(key)
+  const n = v === null ? NaN : Number(v)
+  return Number.isFinite(n) ? n : fallback
+}
 
 // CPU mirror of the distance estimator — one evaluation per frame drives the
-// collision-aware dive speed.
-function deJS(px: number, py: number, pz: number): number {
-  let zx = px
-  let zy = py
-  let zz = pz
-  let dr = 1
-  let r = 0
-  for (let i = 0; i < DE_ITER; i++) {
-    r = Math.sqrt(zx * zx + zy * zy + zz * zz)
-    if (r > 2) break
-    const theta = Math.acos(zz / (r || 1e-9)) * POWER
-    const phi = Math.atan2(zy, zx) * POWER
-    const zr = Math.pow(r, POWER)
-    dr = Math.pow(r, POWER - 1) * POWER * dr + 1
-    zx = zr * Math.sin(theta) * Math.cos(phi) + px
-    zy = zr * Math.sin(theta) * Math.sin(phi) + py
-    zz = zr * Math.cos(theta) + pz
+// collision-aware dive speed. Must match mapDE below.
+function makeDeJS(fold: number, zfac: number) {
+  return (px: number, py: number, pz: number): number => {
+    let zx = px
+    let zy = py
+    let zz = pz
+    let dr = 1
+    let r2 = zx * zx + zy * zy + zz * zz
+    if (r2 > BOUND_R * BOUND_R) return Math.sqrt(r2) - SET_R
+    for (let i = 0; i < DE_ITER; i++) {
+      // box fold
+      zx = Math.min(Math.max(zx, -fold), fold) * 2 - zx
+      zy = Math.min(Math.max(zy, -fold), fold) * 2 - zy
+      zz = Math.min(Math.max(zz, -fold), fold) * 2 - zz
+      // sphere fold (fR2=1, mR2=0.25) — factor clamps to fR2/mR2 = 4
+      r2 = zx * zx + zy * zy + zz * zz
+      const factor = Math.min(Math.max(1 / Math.max(r2, 1e-12), 1), 4)
+      zx *= factor
+      zy *= factor
+      zz *= factor
+      dr *= factor
+      // scale
+      zx *= 2
+      zy *= 2
+      zz *= 2
+      dr *= 2
+      // quadratic bulb
+      const x2 = zx * zx
+      const y2 = zy * zy
+      const z2 = zz * zz
+      const xy2 = Math.max(x2 + y2, 1e-12)
+      const temp = 1 - z2 / xy2
+      const rNow = Math.sqrt(x2 + y2 + z2)
+      dr = 2 * rNow * dr + 1
+      const nx = (x2 - y2) * temp
+      const ny = 2 * zx * zy * temp
+      const nz = -2 * zz * Math.sqrt(xy2) * zfac
+      zx = nx + px
+      zy = ny + py
+      zz = nz + pz
+      r2 = zx * zx + zy * zy + zz * zz
+      if (r2 > 100) break
+    }
+    const r = Math.sqrt(Math.max(r2, 1e-12))
+    return (0.5 * Math.log(r) * r) / dr
   }
-  return (0.5 * Math.log(Math.max(r, 1e-9)) * r) / dr
 }
 
 export async function createBulb(canvas: HTMLCanvasElement): Promise<Bulb | null> {
@@ -83,12 +121,20 @@ export async function createBulb(canvas: HTMLCanvasElement): Promise<Bulb | null
     return null
   }
 
+  const foldFactor = urlNum('ff', 1.0)
+  const zFactor = urlNum('zf', 1.0)
+  const deJS = makeDeJS(foldFactor, zFactor)
+  // ?dbg=hit|heat|ao|trap — shader is built with the channel visualized (QA only)
+  const dbgMode = new URLSearchParams(window.location.search).get('dbg')
+
   // --- uniforms ---
   const uCamPos = uniform(new THREE.Vector3(0, 0.4, 3.4))
   const uFwd = uniform(new THREE.Vector3(0, 0, -1))
   const uRight = uniform(new THREE.Vector3(1, 0, 0))
   const uUp = uniform(new THREE.Vector3(0, 1, 0))
   const uAspect = uniform(1)
+  const uFold = uniform(foldFactor)
+  const uZfac = uniform(zFactor)
 
   // TSL's typings are narrower than its runtime for generic shader helpers;
   // the spike opts out locally rather than fighting them.
@@ -99,33 +145,56 @@ export async function createBulb(canvas: HTMLCanvasElement): Promise<Bulb | null
   const uPalC = uniform(new THREE.Vector3(1.0, 0.91, 0.78))
 
   // --- TSL shader ---
+  // BoxFoldBulbPow2 distance estimator. Returns vec2(de, orbit trap).
+  // returns vec3(de, min-r orbit trap, escape-iteration fraction)
   const mapDE = Fn(([p]: [TSLNode]) => {
+    const out = vec3(0, 0, 0).toVar()
+    const r02 = dot(p, p)
+    If(r02.greaterThan(BOUND_R * BOUND_R), () => {
+      out.assign(vec3(sqrt(r02).sub(SET_R), 2.0, 0.0))
+    }).Else(() => {
     const z = vec3(p).toVar()
     const dr = float(1).toVar()
-    const r = float(0).toVar()
+    const r2 = float(0).toVar()
     const trap = float(1e5).toVar()
+    const it = float(0).toVar()
     Loop(DE_ITER, () => {
-      r.assign(length(z))
-      If(r.greaterThan(2.0), () => {
-        Break()
-      })
-      trap.assign(min(trap, r))
-      const theta = acos(z.z.div(max(r, 1e-9))).mul(POWER)
-      const phi = atan(z.y, z.x).mul(POWER)
-      const zr = pow(r, POWER)
-      dr.assign(pow(r, POWER - 1).mul(POWER).mul(dr).add(1.0))
+      it.addAssign(1)
+      // box fold: x = clamp(x,-F,F)*2 - x
+      z.assign(clamp(z, vec3(uFold.negate()), vec3(uFold)).mul(2.0).sub(z))
+      // sphere fold (fR2=1, mR2=0.25) — branchless
+      r2.assign(dot(z, z))
+      const factor = clamp(float(1).div(max(r2, 1e-12)), 1.0, 4.0)
+      z.mulAssign(factor)
+      dr.mulAssign(factor)
+      // scale *2
+      z.mulAssign(2.0)
+      dr.mulAssign(2.0)
+      // quadratic bulb (pow2 with inverted z)
+      const x2 = z.x.mul(z.x)
+      const y2 = z.y.mul(z.y)
+      const z2 = z.z.mul(z.z)
+      const xy2 = max(x2.add(y2), 1e-12)
+      const temp = float(1).sub(z2.div(xy2))
+      const rNow = sqrt(x2.add(y2).add(z2))
+      dr.assign(rNow.mul(2.0).mul(dr).add(1.0))
       z.assign(
         vec3(
-          sin(theta).mul(cos(phi)),
-          sin(theta).mul(sin(phi)),
-          cos(theta),
-        )
-          .mul(zr)
-          .add(p),
+          x2.sub(y2).mul(temp),
+          z.x.mul(z.y).mul(2.0).mul(temp),
+          z.z.mul(sqrt(xy2)).mul(-2.0).mul(uZfac),
+        ).add(p),
       )
+      r2.assign(dot(z, z))
+      trap.assign(min(trap, r2))
+      If(r2.greaterThan(100.0), () => {
+        Break()
+      })
     })
-    const de = log(max(r, 1e-9)).mul(0.5).mul(r).div(dr)
-    return vec2(de, trap)
+    const r = sqrt(max(r2, 1e-12))
+    out.assign(vec3(log(r).mul(0.5).mul(r).div(dr), sqrt(trap), it.div(DE_ITER)))
+    })
+    return out
   })
 
   const normalAt = Fn(([p, t]: [TSLNode, TSLNode]) => {
@@ -138,6 +207,31 @@ export async function createBulb(canvas: HTMLCanvasElement): Promise<Bulb | null
     return normalize(n)
   })
 
+  // soft shadow: cheap penumbra march toward the key light
+  const softShadow = Fn(([p, l]: [TSLNode, TSLNode]) => {
+    const sh = float(1).toVar()
+    const tt = float(0.004).toVar()
+    Loop(SHADOW_STEPS, () => {
+      const d = mapDE(p.add(l.mul(tt))).x
+      sh.assign(min(sh, d.mul(10.0).div(tt)))
+      tt.addAssign(clamp(d, 0.002, 0.06))
+      If(sh.lessThan(0.03), () => {
+        Break()
+      })
+      If(tt.greaterThan(1.6), () => {
+        Break()
+      })
+    })
+    return smoothstep(0.0, 1.0, clamp(sh, 0.0, 1.0))
+  })
+
+  // black → deep ember → fire → white-hot, driven by the route palette
+  const fireRamp = Fn(([v]: [TSLNode]) => {
+    const c1 = mix(vec3(0.004, 0.004, 0.007), vec3(uPalA), smoothstep(0.0, 0.38, v))
+    const c2 = mix(c1, vec3(uPalB), smoothstep(0.34, 0.78, v))
+    return mix(c2, vec3(uPalC), smoothstep(0.76, 1.0, v))
+  })
+
   const shade = Fn(() => {
     const ndc = uv().mul(2).sub(1).toVar()
     const rd = normalize(
@@ -145,56 +239,115 @@ export async function createBulb(canvas: HTMLCanvasElement): Promise<Bulb | null
     ).toVar()
     const ro = vec3(uCamPos).toVar()
 
+    // bounding-sphere clip: background rays never march the fractal
     const t = float(0).toVar()
-    const hit = float(0).toVar()
-    const trapOut = float(0).toVar()
-    const minRel = float(10).toVar()
-    Loop(MARCH_STEPS, () => {
-      const pos = ro.add(rd.mul(t))
-      const res = mapDE(pos)
-      const d = res.x
-      minRel.assign(min(minRel, d.div(max(t, 0.02))))
-      If(d.lessThan(max(t.mul(0.0009), 0.00018)), () => {
-        hit.assign(1)
-        trapOut.assign(res.y)
-        Break()
-      })
-      t.addAssign(d.mul(0.9))
-      If(t.greaterThan(9.0), () => {
-        Break()
+    const kill = float(0).toVar()
+    const b = dot(ro, rd)
+    const cc = dot(ro, ro).sub(BOUND_R * BOUND_R)
+    If(cc.greaterThan(0.0), () => {
+      const disc = b.mul(b).sub(cc)
+      If(disc.lessThan(0.0).or(b.greaterThan(0.0)), () => {
+        kill.assign(1)
+      }).Else(() => {
+        t.assign(max(b.negate().sub(sqrt(disc)), 0.0))
       })
     })
 
-    // background: deep vertical gradient + near-miss ember halo
-    const bg = mix(vec3(0.006, 0.007, 0.01), vec3(0.028, 0.012, 0.008), smoothstep(-1, 1, ndc.y).oneMinus())
-    const halo = exp(minRel.mul(-30.0)).mul(0.3)
+    const hit = float(0).toVar()
+    const trapOut = float(0).toVar()
+    const minRel = float(10).toVar()
+    const glow = float(0).toVar()
+    If(kill.lessThan(0.5), () => {
+      Loop(MARCH_STEPS, () => {
+        const pos = ro.add(rd.mul(t))
+        const res = mapDE(pos)
+        const d = res.x
+        minRel.assign(min(minRel, d.div(max(t, 0.02))))
+        glow.addAssign(exp(d.mul(-46.0)).mul(0.004))
+        If(d.lessThan(max(t.mul(0.0009), 0.00018)), () => {
+          hit.assign(1)
+          trapOut.assign(res.y)
+          Break()
+        })
+        t.addAssign(d.mul(0.85))
+        If(t.greaterThan(9.0), () => {
+          Break()
+        })
+      })
+      // step-exhausted rays crawled up to a surface without formally hitting it —
+      // shade them as hits so dense interiors read as walls, not halo wash
+      If(hit.lessThan(0.5).and(t.lessThan(8.5)), () => {
+        hit.assign(1)
+        trapOut.assign(mapDE(ro.add(rd.mul(t))).y)
+      })
+    })
+
+    // background: void gradient with a faint ember floor + near-miss halo
+    const bg = mix(
+      vec3(0.004, 0.005, 0.009),
+      vec3(0.030, 0.011, 0.007),
+      smoothstep(-1, 1, ndc.y).oneMinus(),
+    )
+    const halo = exp(minRel.mul(-60.0)).mul(0.14)
     const missCol = bg.add(uPalB.mul(halo))
 
     // hit shading
     const pos = ro.add(rd.mul(t))
     const n = normalAt(pos, t)
-    const lightDir = normalize(vec3(0.62, 0.7, 0.35))
-    const diff = clamp(dot(n, lightDir), 0.0, 1.0)
+    const keyDir = normalize(vec3(0.55, 0.72, 0.42))
+    const fillDir = normalize(vec3(-0.6, -0.15, -0.5))
+    const sh = softShadow(pos.add(n.mul(0.002)), keyDir)
+    const diff = clamp(dot(n, keyDir), 0.0, 1.0).mul(sh)
+    const fill = clamp(dot(n, fillDir), 0.0, 1.0)
     // AO: DE samples along the normal
     const ao = float(0).toVar()
     Loop(4, ({ i }) => {
       const h = float(i).add(1).mul(0.012)
       ao.addAssign(clamp(mapDE(pos.add(n.mul(h))).x.div(h), 0.0, 1.0))
     })
-    ao.assign(ao.mul(0.25).mul(0.7).add(0.3))
+    ao.assign(ao.mul(0.25).mul(0.72).add(0.28))
     const fresnel = pow(clamp(dot(n, rd.negate()), 0.0, 1.0).oneMinus(), 3.0)
-    const bandv = clamp(trapOut.mul(0.55), 0.0, 1.0)
-    const base = mix(uPalA, uPalB, smoothstep(0.18, 0.95, bandv))
-    const litRaw = base
-      .mul(diff.mul(0.85).add(0.18))
-      .add(uPalC.mul(fresnel).mul(0.55))
-      .mul(ao)
-    // distance fog into the background
-    const lit = mix(litRaw, bg, clamp(t.mul(0.16), 0.0, 1.0).mul(0.85))
+    const spec = pow(clamp(dot(reflect(rd, n), keyDir), 0.0, 1.0), 28.0)
+      .mul(sh)
+      .mul(0.5)
 
-    const col = mix(missCol, lit, hit)
-    // gentle tonemap + gamma-ish lift
-    return vec4(pow(col.div(col.add(0.75)).mul(1.45), vec3(0.95)), 1.0)
+    // heat: measured surface trap median ≈ 3.25 (min |z| over the orbit) — steep
+    // curve around it spreads the ramp; radial depth adds the geode gradient
+    // (black shell, fire toward the core)
+    const heat = smoothstep(3.05, 3.95, trapOut)
+      .mul(0.6)
+      .add(smoothstep(1.35, 0.78, sqrt(dot(pos, pos))).mul(0.4))
+    const base = fireRamp(heat)
+    const embers = vec3(uPalB).mul(pow(ao.oneMinus(), 3.0)).mul(heat.mul(0.9).add(0.1)).mul(1.1)
+    // cold obsidian stays matte; only hot material glints and rims
+    const glintGate = heat.mul(0.85).add(0.15)
+    const litRaw = base
+      .mul(diff.mul(1.05).add(0.06))
+      .add(vec3(0.05, 0.07, 0.12).mul(fill).mul(0.5))
+      .add(mix(vec3(uPalB), vec3(uPalC), heat).mul(spec).mul(glintGate))
+      .add(vec3(uPalC).mul(fresnel).mul(0.25).mul(glintGate))
+      .mul(ao)
+      .add(embers)
+    // distance fog into the void
+    const lit = mix(litRaw, bg, clamp(t.sub(1.0).mul(0.22), 0.0, 0.9))
+
+    // QA debug channels (compiled in only when ?dbg= is set)
+    if (dbgMode === 'hit') return vec4(vec3(hit, minRel.min(1), 0), 1.0)
+    if (dbgMode === 'heat') return vec4(vec3(heat), 1.0)
+    if (dbgMode === 'ao') return vec4(vec3(ao), 1.0)
+    if (dbgMode === 'trap') return vec4(vec3(trapOut.mul(0.25)), 1.0)
+    if (dbgMode === 'base') return vec4(base.mul(hit), 1.0)
+    if (dbgMode === 'embers') return vec4(embers.mul(hit), 1.0)
+    if (dbgMode === 'glow') return vec4(vec3(min(glow, 0.5)), 1.0)
+    if (dbgMode === 'lit') return vec4(litRaw.mul(hit), 1.0)
+
+    const col = mix(missCol, lit, hit).add(vec3(uPalB).mul(min(glow, 0.35)).mul(0.35)).toVar()
+    // ACES-ish tonemap, gentle gamma, corner vignette
+    const tone = col
+      .mul(col.mul(2.51).add(0.03))
+      .div(col.mul(col.mul(2.43).add(0.59)).add(0.14))
+    const vig = float(1).sub(dot(ndc, ndc).mul(0.16))
+    return vec4(pow(clamp(tone.mul(vig), 0.0, 1.0), vec3(0.92)), 1.0)
   })
 
   const material = new THREE.MeshBasicNodeMaterial()
@@ -206,9 +359,14 @@ export async function createBulb(canvas: HTMLCanvasElement): Promise<Bulb | null
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
 
   // --- camera state & input ---
-  const pos = new THREE.Vector3(0, 0.35, 3.4)
-  let yaw = Math.PI // looking toward -z... forward computed below
-  let pitch = -0.1
+  // ?cam=x,y,z / ?yaw= / ?pitch= override the start pose (QA/motion-tile scouting)
+  const camParam = new URLSearchParams(window.location.search).get('cam')
+  const camStart = camParam?.split(',').map(Number) ?? []
+  const pos = camStart.length === 3 && camStart.every(Number.isFinite)
+    ? new THREE.Vector3(camStart[0], camStart[1], camStart[2])
+    : new THREE.Vector3(0, 0.1, 1.75) // at the shell mouth, mandala framed
+  let yaw = urlNum('yaw', Math.PI) // default: looking toward -z (forward computed below)
+  let pitch = urlNum('pitch', -0.05)
   let vel = 0
   let dragging = false
   let lastX = 0
@@ -248,6 +406,12 @@ export async function createBulb(canvas: HTMLCanvasElement): Promise<Bulb | null
   const palTo: BulbPalette = { ...palFrom }
   let palT = 1
 
+  // --- adaptive resolution: hold ~60fps; manual DPR buttons take over ---
+  const DPR_CAP = Math.min(window.devicePixelRatio || 1, 1.5)
+  let pixelRatio = DPR_CAP
+  let autoRes = true
+  let tuneAt = performance.now() + 1500
+
   // --- loop ---
   let raf = 0
   let lastT = performance.now()
@@ -266,7 +430,7 @@ export async function createBulb(canvas: HTMLCanvasElement): Promise<Bulb | null
     renderer.setSize(w, h, false)
     uAspect.value = w / h
   }
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5))
+  renderer.setPixelRatio(pixelRatio)
   resize()
   const ro = new ResizeObserver(resize)
   ro.observe(canvas)
@@ -276,6 +440,21 @@ export async function createBulb(canvas: HTMLCanvasElement): Promise<Bulb | null
     const dt = Math.min(0.05, (now - lastT) / 1000)
     lastT = now
     fps = fps * 0.92 + (dt > 0 ? 1 / dt : 0) * 0.08
+
+    // adaptive resolution: trade pixels for frame rate, never below 0.55×
+    if (autoRes && now > tuneAt) {
+      if (fps < 50 && pixelRatio > 0.55) {
+        pixelRatio = Math.max(0.55, pixelRatio - 0.15)
+        renderer.setPixelRatio(pixelRatio)
+        resize()
+        tuneAt = now + 1200
+      } else if (fps > 72 && pixelRatio < DPR_CAP) {
+        pixelRatio = Math.min(DPR_CAP, pixelRatio + 0.1)
+        renderer.setPixelRatio(pixelRatio)
+        resize()
+        tuneAt = now + 1200
+      }
+    }
 
     // orientation
     fwd.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)).normalize()
@@ -326,6 +505,8 @@ export async function createBulb(canvas: HTMLCanvasElement): Promise<Bulb | null
       palT = 0
     },
     setPixelRatio(r: number) {
+      autoRes = false
+      pixelRatio = r
       renderer.setPixelRatio(r)
       resize()
     },
