@@ -687,7 +687,7 @@
   .j-home-scrim {
     background:
       linear-gradient(to top, var(--j-bg) 0%, var(--j-bg) 44%, rgba(10, 11, 13, 0.97) 60%, rgba(10, 11, 13, 0.6) 74%, transparent 92%),
-      radial-gradient(140% 110% at 50% 30%, transparent 48%, var(--j-bg) 100%);
+      radial-gradient(140% 110% at 50% 22%, transparent 48%, var(--j-bg) 100%);
   }
   .j-home-copy {
     padding-top: 42dvh;

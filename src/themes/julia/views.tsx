@@ -52,7 +52,7 @@ export function Home({ content, navigate }: { content: SiteContent; navigate: Na
       <FractalCanvas
         params={
           narrow
-            ? { ...ROUTE_C.home, span: 2.7, centerX: 0.5, centerY: 0.32, angle: -0.7 }
+            ? { ...ROUTE_C.home, span: 2.7, centerX: 0.5, centerY: 0.22, angle: -0.7 }
             : { ...ROUTE_C.home, span: 2.3, centerX: 0.54, centerY: 0.46, angle: -0.7 }
         }
         live="hero"
