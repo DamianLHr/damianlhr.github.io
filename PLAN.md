@@ -128,25 +128,31 @@ bootstrap the taste loop before heavy 3D investment.*
       `?zf=` `?dbg=hit|heat|ao|trap|base|embers|glow|lit`. Dev-preview GPU:
       ~240 fps WebGPU and ~230 fps forced-WebGL2 at 1298×1493, ~90–160 fps deep
       in dense interior views.
-- [~] Measure on real hardware — HUD shows fps/backend/resolution/surface-distance
-      with DPR buttons. First numbers (dev preview GPU, 1298×1075 WebGPU): ~240 fps
-      orbiting, ~228 fps deep in the folds. **Damyan's machine numbers pending
-      (WebGPU at each DPR + `?webgl` tier).**
-- [ ] Decision memo into TECHNOLOGY.md after Gate 3 numbers: live vs pre-rendered
-      per tier; fp32 depth limit noted (~4-6 orders of magnitude of dive).
-- [~] **GATE 3 — "the dive is real": awaiting Damyan** — dive it on his machine,
-  read the HUD numbers, go/adjust on singularity scope.
+- [x] Measure on real hardware — HUD shows fps/backend/resolution/surface-distance
+      with DPR buttons (now `?hud` in the singularity theme; spike retired). Dev
+      preview GPU: ~240 fps WebGPU and ~230 fps forced-WebGL2 at 1298×1493.
+- [ ] Decision memo into TECHNOLOGY.md: live vs pre-rendered per tier; fp32 depth
+      limit noted (~4-6 orders of magnitude of dive).
+- [x] **GATE 3 — PASSED 2026-07-08.** Damyan approved the fold-bulb look and the
+      default landing pose ("the starting position and rotation look good") and
+      ordered the full theme build.
 
 ### Phase 4 — `singularity` full build *(the flagship, ~3–5 sessions)*
-- [ ] Art DNA design: per-project + per-route fractal params/palettes (Mandelbulber
-      `.fract` files authored; offline renders queued for reuse by other themes)
-- [ ] Style tile equivalent: **motion tile** — 2–3 short dive treatments (camera feel,
-      color language, content presentation inside the bulb) → **GATE 4a: pick**
-- [ ] Full navigation-as-dive across all routes; content surfaces woven into the scene;
-      compute particles; post chain; internal WebGL 2 degradation; context-loss →
-      `julia` kick-down
-- [ ] Motion + design QA passes (as Phase 2); perf soak (10-min run, no leak, stable
-      frame time; heap + draw-call budget in dev overlay)
+- [x] v1 theme SHIPPED 2026-07-08 (live at `?theme=singularity`, weight 15 — below
+      julia until Gate 4b): full navigation-as-dive (route links fly the camera
+      between authored poses with ease-in-out flights + palette crossfades; user
+      scroll/drag cancels flight; reduced-motion snaps), content as obsidian glass
+      panels (desktop right rail / mobile bottom sheet), per-route scenes (home
+      mandala · cv ice high-orbit · projects violet ring city · interests emerald
+      equator · 404 under the pole) + per-project pose/palette identity by slug
+      hash. Spike theme retired into it (HUD behind `?hud`). All routes verified
+      live: desktop + mobile, zero console errors, 27 tests + boundaries green.
+- [~] Art DNA: route/project scenes authored in code; Mandelbulber `.fract` files
+      + offline renders for other themes still open
+- [ ] Motion tile skipped by Damyan's direct approval of the spike direction; camera
+      feel to be revisited at Gate 4b review if wanted
+- [ ] Still open for 4b: compute particles; post chain; context-loss → `julia`
+      kick-down; perf soak (10-min run, no leak; heap + draw-call budget)
 - **GATE 4b — "flagship approved":** live review on Damyan's hardware; `singularity`
   gets highest weight (auto-wins on WebGPU devices).
 

@@ -1,11 +1,14 @@
-// Phase 3→4 spike: real-time raymarched BoxFoldBulbPow2 (Mandelbulber's
-// foldingIntPow formula: mandelbox folds feeding a quadratic bulb) in Three.js TSL.
-// One shader → WGSL on WebGPU, GLSL on WebGL 2 (?webgl forces the fallback tier).
-// Scroll dives: camera speed scales with the distance estimator, so you glide into
-// the folds without clipping. Look: black→fire ramp, warm key with soft shadows,
-// cool fill, crevice embers, volumetric glow, fog. Resolution adapts to hold fps.
+// singularity — the flagship renderer. Raymarched BoxFoldBulbPow2 (Mandelbulber's
+// foldingIntPow: mandelbox box/sphere folds feeding a quadratic bulb) in Three.js
+// TSL. One shader → WGSL on WebGPU, GLSL on WebGL 2 (?webgl forces the fallback).
+// Navigation is a dive: the theme flies the camera between authored poses per
+// route (flyTo), scroll dives with DE-scaled collision-aware speed, drag looks.
+// Art: black→fire ramp from the route palette, warm key + soft raymarched
+// shadows, cool fill, heat-gated glints, crevice embers, fog, ACES-ish tonemap.
+// Resolution adapts to hold fps; the HUD (?hud) can pin it manually.
 //
-// Tuning QA params: ?ff=<foldFactor> ?zf=<zFactor> (defaults 1.0 / 1.0)
+// QA params: ?cam=x,y,z ?yaw= ?pitch= ?ff= ?zf=
+//            ?dbg=hit|heat|ao|trap|base|embers|glow|lit
 
 import * as THREE from 'three/webgpu'
 import {
@@ -38,8 +41,15 @@ export interface BulbPalette {
   c: [number, number, number]
 }
 
+export interface BulbPose {
+  pos: [number, number, number]
+  yaw: number
+  pitch: number
+}
+
 export interface Bulb {
   setPalette: (p: BulbPalette) => void
+  flyTo: (pose: BulbPose, instant?: boolean) => void
   setPixelRatio: (r: number) => void
   stats: () => { fps: number; backend: string; width: number; height: number; dist: number }
   dispose: () => void
@@ -110,25 +120,35 @@ function makeDeJS(fold: number, zfac: number) {
   }
 }
 
-export async function createBulb(canvas: HTMLCanvasElement): Promise<Bulb | null> {
+const shortestAngle = (from: number, to: number): number => {
+  let d = (to - from) % (Math.PI * 2)
+  if (d > Math.PI) d -= Math.PI * 2
+  if (d < -Math.PI) d += Math.PI * 2
+  return d
+}
+
+export async function createBulb(
+  canvas: HTMLCanvasElement,
+  start: BulbPose,
+): Promise<Bulb | null> {
   const forceWebGL = new URLSearchParams(window.location.search).has('webgl')
   let renderer: InstanceType<typeof THREE.WebGPURenderer>
   try {
     renderer = new THREE.WebGPURenderer({ canvas, antialias: false, forceWebGL })
     await renderer.init()
   } catch (e) {
-    console.error('spike: renderer init failed', e)
+    console.error('singularity: renderer init failed', e)
     return null
   }
 
   const foldFactor = urlNum('ff', 1.0)
   const zFactor = urlNum('zf', 1.0)
   const deJS = makeDeJS(foldFactor, zFactor)
-  // ?dbg=hit|heat|ao|trap — shader is built with the channel visualized (QA only)
+  // ?dbg=… — shader is built with the channel visualized (QA only)
   const dbgMode = new URLSearchParams(window.location.search).get('dbg')
 
   // --- uniforms ---
-  const uCamPos = uniform(new THREE.Vector3(0, 0.4, 3.4))
+  const uCamPos = uniform(new THREE.Vector3(...start.pos))
   const uFwd = uniform(new THREE.Vector3(0, 0, -1))
   const uRight = uniform(new THREE.Vector3(1, 0, 0))
   const uUp = uniform(new THREE.Vector3(0, 1, 0))
@@ -137,7 +157,7 @@ export async function createBulb(canvas: HTMLCanvasElement): Promise<Bulb | null
   const uZfac = uniform(zFactor)
 
   // TSL's typings are narrower than its runtime for generic shader helpers;
-  // the spike opts out locally rather than fighting them.
+  // the theme opts out locally rather than fighting them.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   type TSLNode = any
   const uPalA = uniform(new THREE.Vector3(0.16, 0.04, 0.03))
@@ -145,54 +165,53 @@ export async function createBulb(canvas: HTMLCanvasElement): Promise<Bulb | null
   const uPalC = uniform(new THREE.Vector3(1.0, 0.91, 0.78))
 
   // --- TSL shader ---
-  // BoxFoldBulbPow2 distance estimator. Returns vec2(de, orbit trap).
-  // returns vec3(de, min-r orbit trap, escape-iteration fraction)
+  // BoxFoldBulbPow2 distance estimator. Returns vec3(de, min-r orbit trap, escape frac).
   const mapDE = Fn(([p]: [TSLNode]) => {
     const out = vec3(0, 0, 0).toVar()
     const r02 = dot(p, p)
     If(r02.greaterThan(BOUND_R * BOUND_R), () => {
       out.assign(vec3(sqrt(r02).sub(SET_R), 2.0, 0.0))
     }).Else(() => {
-    const z = vec3(p).toVar()
-    const dr = float(1).toVar()
-    const r2 = float(0).toVar()
-    const trap = float(1e5).toVar()
-    const it = float(0).toVar()
-    Loop(DE_ITER, () => {
-      it.addAssign(1)
-      // box fold: x = clamp(x,-F,F)*2 - x
-      z.assign(clamp(z, vec3(uFold.negate()), vec3(uFold)).mul(2.0).sub(z))
-      // sphere fold (fR2=1, mR2=0.25) — branchless
-      r2.assign(dot(z, z))
-      const factor = clamp(float(1).div(max(r2, 1e-12)), 1.0, 4.0)
-      z.mulAssign(factor)
-      dr.mulAssign(factor)
-      // scale *2
-      z.mulAssign(2.0)
-      dr.mulAssign(2.0)
-      // quadratic bulb (pow2 with inverted z)
-      const x2 = z.x.mul(z.x)
-      const y2 = z.y.mul(z.y)
-      const z2 = z.z.mul(z.z)
-      const xy2 = max(x2.add(y2), 1e-12)
-      const temp = float(1).sub(z2.div(xy2))
-      const rNow = sqrt(x2.add(y2).add(z2))
-      dr.assign(rNow.mul(2.0).mul(dr).add(1.0))
-      z.assign(
-        vec3(
-          x2.sub(y2).mul(temp),
-          z.x.mul(z.y).mul(2.0).mul(temp),
-          z.z.mul(sqrt(xy2)).mul(-2.0).mul(uZfac),
-        ).add(p),
-      )
-      r2.assign(dot(z, z))
-      trap.assign(min(trap, r2))
-      If(r2.greaterThan(100.0), () => {
-        Break()
+      const z = vec3(p).toVar()
+      const dr = float(1).toVar()
+      const r2 = float(0).toVar()
+      const trap = float(1e5).toVar()
+      const it = float(0).toVar()
+      Loop(DE_ITER, () => {
+        it.addAssign(1)
+        // box fold: x = clamp(x,-F,F)*2 - x
+        z.assign(clamp(z, vec3(uFold.negate()), vec3(uFold)).mul(2.0).sub(z))
+        // sphere fold (fR2=1, mR2=0.25) — branchless
+        r2.assign(dot(z, z))
+        const factor = clamp(float(1).div(max(r2, 1e-12)), 1.0, 4.0)
+        z.mulAssign(factor)
+        dr.mulAssign(factor)
+        // scale *2
+        z.mulAssign(2.0)
+        dr.mulAssign(2.0)
+        // quadratic bulb (pow2 with inverted z)
+        const x2 = z.x.mul(z.x)
+        const y2 = z.y.mul(z.y)
+        const z2 = z.z.mul(z.z)
+        const xy2 = max(x2.add(y2), 1e-12)
+        const temp = float(1).sub(z2.div(xy2))
+        const rNow = sqrt(x2.add(y2).add(z2))
+        dr.assign(rNow.mul(2.0).mul(dr).add(1.0))
+        z.assign(
+          vec3(
+            x2.sub(y2).mul(temp),
+            z.x.mul(z.y).mul(2.0).mul(temp),
+            z.z.mul(sqrt(xy2)).mul(-2.0).mul(uZfac),
+          ).add(p),
+        )
+        r2.assign(dot(z, z))
+        trap.assign(min(trap, r2))
+        If(r2.greaterThan(100.0), () => {
+          Break()
+        })
       })
-    })
-    const r = sqrt(max(r2, 1e-12))
-    out.assign(vec3(log(r).mul(0.5).mul(r).div(dr), sqrt(trap), it.div(DE_ITER)))
+      const r = sqrt(max(r2, 1e-12))
+      out.assign(vec3(log(r).mul(0.5).mul(r).div(dr), sqrt(trap), it.div(DE_ITER)))
     })
     return out
   })
@@ -362,24 +381,45 @@ export async function createBulb(canvas: HTMLCanvasElement): Promise<Bulb | null
   // ?cam=x,y,z / ?yaw= / ?pitch= override the start pose (QA/motion-tile scouting)
   const camParam = new URLSearchParams(window.location.search).get('cam')
   const camStart = camParam?.split(',').map(Number) ?? []
-  const pos = camStart.length === 3 && camStart.every(Number.isFinite)
-    ? new THREE.Vector3(camStart[0], camStart[1], camStart[2])
-    : new THREE.Vector3(0, 0.1, 1.75) // at the shell mouth, mandala framed
-  let yaw = urlNum('yaw', Math.PI) // default: looking toward -z (forward computed below)
-  let pitch = urlNum('pitch', -0.05)
+  const pos =
+    camStart.length === 3 && camStart.every(Number.isFinite)
+      ? new THREE.Vector3(camStart[0], camStart[1], camStart[2])
+      : new THREE.Vector3(...start.pos)
+  let yaw = urlNum('yaw', start.yaw)
+  let pitch = urlNum('pitch', start.pitch)
   let vel = 0
   let dragging = false
   let lastX = 0
   let lastY = 0
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
+  // --- flight (navigation-as-dive) ---
+  const flight = {
+    active: false,
+    t: 0,
+    dur: 1.7,
+    fromPos: new THREE.Vector3(),
+    toPos: new THREE.Vector3(),
+    fromYaw: 0,
+    dYaw: 0,
+    fromPitch: 0,
+    dPitch: 0,
+  }
+  const easeInOut = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2)
+
+  const cancelFlight = () => {
+    flight.active = false
+  }
+
   const onWheel = (e: WheelEvent) => {
     e.preventDefault()
+    cancelFlight()
     vel += -e.deltaY * 0.0011
     vel = Math.max(-2.4, Math.min(2.4, vel))
   }
   const onDown = (e: PointerEvent) => {
     dragging = true
+    cancelFlight()
     lastX = e.clientX
     lastY = e.clientY
     canvas.setPointerCapture(e.pointerId)
@@ -456,8 +496,20 @@ export async function createBulb(canvas: HTMLCanvasElement): Promise<Bulb | null
       }
     }
 
+    // flight easing between authored poses
+    if (flight.active) {
+      flight.t = Math.min(1, flight.t + dt / flight.dur)
+      const k = easeInOut(flight.t)
+      pos.lerpVectors(flight.fromPos, flight.toPos, k)
+      yaw = flight.fromYaw + flight.dYaw * k
+      pitch = flight.fromPitch + flight.dPitch * k
+      if (flight.t >= 1) flight.active = false
+    }
+
     // orientation
-    fwd.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)).normalize()
+    fwd
+      .set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch))
+      .normalize()
     right.crossVectors(fwd, up0).normalize()
     upv.crossVectors(right, fwd).normalize()
 
@@ -488,6 +540,19 @@ export async function createBulb(canvas: HTMLCanvasElement): Promise<Bulb | null
   }
   raf = requestAnimationFrame(frame)
 
+  // Dev QA hook: hidden windows never fire rAF, so preview tooling can pump
+  // frames manually. Not part of the theme contract.
+  if (import.meta.env.DEV) {
+    ;(window as unknown as { __bulbStep?: (n?: number) => void }).__bulbStep = (n = 1) => {
+      // cancel the pending rAF before each manual call so frame()'s own
+      // scheduling never stacks parallel loops; the last call leaves one alive
+      for (let i = 0; i < n; i++) {
+        cancelAnimationFrame(raf)
+        frame(performance.now())
+      }
+    }
+  }
+
   const backendName = (renderer as unknown as { backend?: { isWebGPUBackend?: boolean } })
     .backend?.isWebGPUBackend
     ? 'WebGPU'
@@ -503,6 +568,24 @@ export async function createBulb(canvas: HTMLCanvasElement): Promise<Bulb | null
       Object.assign(palFrom, cur)
       Object.assign(palTo, p)
       palT = 0
+    },
+    flyTo(pose: BulbPose, instant = false) {
+      if (instant || reduced) {
+        pos.set(...pose.pos)
+        yaw = pose.yaw
+        pitch = pose.pitch
+        cancelFlight()
+        return
+      }
+      flight.fromPos.copy(pos)
+      flight.toPos.set(...pose.pos)
+      flight.fromYaw = yaw
+      flight.dYaw = shortestAngle(yaw, pose.yaw)
+      flight.fromPitch = pitch
+      flight.dPitch = pose.pitch - pitch
+      flight.t = 0
+      flight.active = true
+      vel = 0
     },
     setPixelRatio(r: number) {
       autoRes = false

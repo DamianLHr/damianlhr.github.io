@@ -15,13 +15,15 @@ export const themes: ThemeDescriptor[] = [
     load: () => import('./julia'),
   },
   {
-    id: 'spike',
-    name: 'Singularity (spike)',
-    description: 'Phase 3 prototype: dive into a raymarched Mandelbulb. Expect sharp edges.',
+    id: 'singularity',
+    name: 'Singularity',
+    description:
+      'The flagship: dive through a raymarched fold-bulb world; navigation flies the camera.',
     requirements: { webgl2: true },
-    weight: -2,
+    // stays below julia until GATE 4b flips auto-resolution in its favor
+    weight: 15,
     listed: true,
-    load: () => import('./spike'),
+    load: () => import('./singularity'),
   },
   {
     id: 'hold',
