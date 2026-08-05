@@ -142,7 +142,6 @@ function renderTop(w, a, gc) {
   })()
   for (let i = 0; i < s * s; i++) {
     const h = w.height[i]
-    const above = Math.max(0, h - SEA)
     const wet = a.maxD > 0 ? Math.min(1, w.discharge[i] / (a.maxD * 0.12)) : 0
     let c = gc(h, a.slope[i], wet)
     if (h >= SEA) {
@@ -190,7 +189,6 @@ function renderOblique(w, a, gc, { width = 1200, height = 760, zScale = 300, til
     for (let x = 0; x < s; x++) {
       const i = y * s + x
       const h = w.height[i]
-      const above = Math.max(0, h - SEA)
       const wet = a.maxD > 0 ? Math.min(1, w.discharge[i] / (a.maxD * 0.12)) : 0
       let c = gc(h, a.slope[i], wet)
       if (h >= SEA) {
@@ -220,7 +218,7 @@ function renderOblique(w, a, gc, { width = 1200, height = 760, zScale = 300, til
 
       // trees: gentle, low-to-mid ground with some moisture nearby
       const treeOK =
-        h >= SEA + 0.015 && above < 0.34 && a.slope[i] < 0.03 && wet < 0.3 && rng(i * 1.7 + 3) < 0.055
+        h >= SEA + 0.015 && a.slope[i] < 0.03 && wet < 0.3 && rng(i * 1.7 + 3) < 0.055
       if (treeOK) {
         const tx = screenX + Math.floor(rng(i * 3.1) * colW)
         const ty = top
