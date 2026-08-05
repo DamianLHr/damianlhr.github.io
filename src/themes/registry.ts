@@ -18,10 +18,11 @@ export const themes: ThemeDescriptor[] = [
     id: 'singularity',
     name: 'Singularity',
     description:
-      'The flagship: dive through a raymarched fold-bulb world; navigation flies the camera.',
+      'Demanding: fly through a raymarched fold-bulb world. Parked pending a performance pass.',
     requirements: { webgl2: true },
-    // stays below julia until GATE 4b flips auto-resolution in its favor
-    weight: 15,
+    // Parked 2026-08-05: too heavy to be anyone's default. Negative weight keeps it
+    // out of auto-resolution entirely — reachable only via the switcher or ?theme=.
+    weight: -2,
     listed: true,
     load: () => import('./singularity'),
   },

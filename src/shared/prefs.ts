@@ -1,4 +1,7 @@
-const THEME_KEY = 'theme'
+// Bumping the suffix retires every persisted choice and sends returning visitors
+// back through capability/weight resolution. Bumped to v2 on 2026-08-05 when
+// singularity was parked, so devices that had picked it land on the floor again.
+const THEME_KEY = 'theme.v2'
 
 export function getStoredThemeId(): string | null {
   try {
