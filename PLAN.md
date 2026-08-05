@@ -157,13 +157,33 @@ bootstrap the taste loop before heavy 3D investment.*
   gets highest weight (auto-wins on WebGPU devices).
 
 ### Phase 5 — `atlas` theme *(the discovery map, ~2–4 sessions)*
-- [ ] Map design: the CV as one large engraved chart (Blaeu/Ortelius language over the
-      tectonic reference); territory layout for education/experience/plans/
-      proficiencies; other routes as further charts
-- [ ] Style tile: 2–3 map art directions (engraving density, coloring, IM Fell type
-      setting) → **GATE 5a: pick**
-- [ ] SVG + d3-zoom pan/zoom exploration; markers/legends as navigation; Motion
-      micro-interactions; print-quality static fallback
+- [x] Style tiles shipped 2026-08-05 (`design/style-tiles/atlas-{a,b,c}-*.html`, same
+      geography in each so only treatment varies). **GATE 5a PASSED: Damyan picked
+      B — "Iron Gall"** (laid paper, oxidised ink, one rubric red, tone by hatching
+      alone). **A "Blaeu Maior" is stashed as a live alternate, not rejected** —
+      revisit once real terrain can be judged. C "Tectonic" archived.
+- [x] Terrain engine (`themes/atlas/terrain.ts`): seeded midpoint-displacement
+      coastlines — the site's fractal DNA wearing 1662 (coastlines being
+      Mandelbrot's own example). Composition stays authored, silhouette is
+      generated. Local displacement cap can't see across narrow necks, so
+      `territory()` generates → verifies simple → retries at lower roughness →
+      falls back to the star-shaped control polygon; a broken outline never
+      renders. 14 property tests (determinism, no self-crossing over a 180-case
+      sweep, stable area, coastline paradox). Measured over 400 seeds: 0 fell back,
+      isoperimetric ratio median 1.52 (circle 1.0, square 1.27).
+- [x] Theme v1 live at `?theme=atlas`, weight 5: CV as mainland with EDUCATION /
+      EXPERIENCE provinces split by a generated border, projects as an archipelago,
+      proficiency→project cross-links as correlation routes, Delft as an unsurveyed
+      coast, IM Fell self-hosted. Shares nothing with julia/singularity — own
+      palette, type, primitives and easing; the only light theme on the site.
+      Fixed in review: furniture positioned in viewport % while the map lived in
+      viewBox coords, so the collision-free composition only held at one aspect
+      ratio — map and furniture now share one 16:10 plate. Verified collision-free
+      (land, lettering, panels) across 1.4/1.6/1.78 and all six routes; mobile
+      turns the plate into a header band with the folio beneath.
+- [ ] Pan/zoom exploration (d3-zoom), markers as navigation, per-route charts
+- [ ] A11y: keyboard walk of regions + "read as document" mode (first-class, built
+      alongside — a map is hostile to screen readers); print-quality static fallback
 - **GATE 5b — "atlas approved."**
 
 ### Phase 6 — `blueprint` theme *(industrial, ~2–3 sessions)*

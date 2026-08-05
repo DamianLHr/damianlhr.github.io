@@ -1,0 +1,615 @@
+/* atlas — "Iron Gall" (GATE 5a, direction B).
+   Laid paper, oxidised iron-gall ink, one permitted rubric red, tone carried by
+   hatching alone. Deliberately shares nothing with julia or singularity: own
+   palette, own type, own primitives (cartouche/legend/neatline, not cards), own
+   easing. This is the only light theme on the site. */
+
+.atl {
+  --a-paper: #ece3d0;
+  --a-ink: #2c2218; /* iron gall, oxidised brown-black */
+  --a-ink-soft: #5e4f3c;
+  --a-rubric: #a5301b; /* the one permitted colour */
+  --a-rule: rgba(44, 34, 24, 0.4);
+  /* deliberate, surveyor's easing — slower than the other themes' UI snap */
+  --a-ease: cubic-bezier(0.33, 0.02, 0.15, 1);
+
+  position: relative;
+  min-height: 100dvh;
+  color: var(--a-ink);
+  font-family: 'IM Fell English', Georgia, serif;
+  /* laid paper: fine laid lines + widely spaced chain lines */
+  background:
+    repeating-linear-gradient(90deg, rgba(44, 34, 24, 0.02) 0 1px, transparent 1px 5px),
+    repeating-linear-gradient(0deg, rgba(44, 34, 24, 0.055) 0 1.5px, transparent 1.5px 34px),
+    var(--a-paper);
+}
+
+/* The plate is a bounded sheet, not a bleed. Map and furniture share one
+   coordinate space so the composition — land clear of cartouche and legend —
+   holds at every aspect ratio instead of only the one it was tuned at.
+   16:10 matches the SVG viewBox exactly, so nothing is ever cropped. */
+.a-plate-wrap {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(100vw, calc(100dvh * 1.6));
+  height: min(100dvh, calc(100vw / 1.6));
+}
+
+.a-plate {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.a-grain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  opacity: 0.34;
+  z-index: 1;
+}
+
+/* engraved neatline + plate mark */
+.a-neatline {
+  position: absolute;
+  inset: 1.9%;
+  border: 1px solid var(--a-ink);
+  outline: 3px solid var(--a-ink);
+  outline-offset: 4px;
+  opacity: 0.75;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* ---------- navigation: a ruled index, not a menu bar ---------- */
+
+.a-index {
+  position: absolute;
+  z-index: 5;
+  top: 4.4%;
+  right: 5%;
+  display: grid;
+  gap: 0.2rem;
+  justify-items: end;
+  text-align: right;
+}
+
+.a-index-tag {
+  margin: 0 0 0.3rem;
+  font-family: 'IM Fell English SC', serif;
+  font-size: 0.68rem;
+  letter-spacing: 0.36em;
+  color: var(--a-rubric);
+}
+
+.a-index a {
+  font-family: 'IM Fell English SC', serif;
+  font-size: 0.95rem;
+  letter-spacing: 0.17em;
+  color: var(--a-ink-soft);
+  text-decoration: none;
+  padding: 0.12rem 0;
+  border-bottom: 1px solid transparent;
+  transition:
+    color 220ms var(--a-ease),
+    border-color 220ms var(--a-ease);
+}
+
+.a-index a[aria-current='page'] {
+  color: var(--a-ink);
+  border-bottom-color: var(--a-rubric);
+}
+
+/* ---------- cartouche ---------- */
+
+.a-cartouche {
+  position: absolute;
+  z-index: 4;
+  left: 5.2%;
+  top: 8%;
+  width: min(30%, 27rem);
+  padding: 1.8rem 0 1.6rem;
+  border-top: 2.5px solid var(--a-ink);
+  border-bottom: 2.5px solid var(--a-ink);
+  background: linear-gradient(rgba(236, 227, 208, 0.9), rgba(236, 227, 208, 0.82));
+}
+
+.a-cartouche::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  border-bottom: 1px solid var(--a-ink);
+}
+
+.a-eyebrow {
+  margin: 0 0 0.8rem;
+  font-family: 'IM Fell English SC', serif;
+  font-size: 0.76rem;
+  letter-spacing: 0.42em;
+  text-align: center;
+  color: var(--a-rubric);
+}
+
+.a-title {
+  margin: 0;
+  font-family: 'IM Fell Great Primer', Georgia, serif;
+  font-weight: 400;
+  font-size: clamp(1.7rem, 2.9vw, 2.8rem);
+  line-height: 1.02;
+  text-align: center;
+}
+
+.a-title em {
+  display: block;
+  font-style: italic;
+  font-size: 0.5em;
+  margin-top: 0.4rem;
+  color: var(--a-ink-soft);
+}
+
+.a-lede {
+  margin: 1.05rem 0 0;
+  font-size: 1.02rem;
+  line-height: 1.62;
+  text-align: justify;
+  hyphens: auto;
+}
+
+.a-lede .a-drop {
+  float: left;
+  font-family: 'IM Fell Great Primer', Georgia, serif;
+  font-size: 3.5rem;
+  line-height: 0.76;
+  padding: 0.1em 0.13em 0 0;
+  color: var(--a-rubric);
+}
+
+.a-imprint {
+  margin: 0.95rem 0 0;
+  text-align: center;
+  font-style: italic;
+  font-size: 0.86rem;
+  color: var(--a-ink-soft);
+}
+
+.a-socials {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem 1.1rem;
+  margin-top: 0.9rem;
+  font-size: 0.86rem;
+}
+
+.a-socials a,
+.a-out {
+  color: var(--a-ink-soft);
+  text-decoration: none;
+  border-bottom: 1px solid var(--a-rubric);
+  transition: color 220ms var(--a-ease);
+}
+
+.a-out {
+  display: inline-block;
+  margin: 0.35rem 1.1rem 0 0;
+  font-style: italic;
+}
+
+/* ---------- legend ---------- */
+
+.a-legend {
+  position: absolute;
+  z-index: 4;
+  right: 5%;
+  bottom: 8%;
+  width: min(25%, 23rem);
+  padding-top: 0.85rem;
+  border-top: 2.5px solid var(--a-ink);
+}
+
+.a-legend h2 {
+  margin: 0 0 0.75rem;
+  font-family: 'IM Fell English SC', serif;
+  font-weight: 400;
+  font-size: 0.86rem;
+  letter-spacing: 0.34em;
+  color: var(--a-rubric);
+}
+
+.a-legend-row {
+  display: grid;
+  grid-template-columns: 2.7rem 1fr;
+  gap: 0.7rem;
+  align-items: center;
+  margin-bottom: 0.48rem;
+}
+
+.a-legend-row svg {
+  display: block;
+}
+
+.a-legend-row span {
+  font-size: 0.85rem;
+  line-height: 1.3;
+}
+
+.a-legend-note {
+  margin: 0.8rem 0 0;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--a-rule);
+  font-size: 0.81rem;
+  font-style: italic;
+  line-height: 1.45;
+  color: var(--a-ink-soft);
+}
+
+/* ---------- reading panel (inner routes) ---------- */
+
+.a-folio {
+  position: absolute;
+  z-index: 4;
+  left: 5.2%;
+  top: 8%;
+  bottom: 8%;
+  /* narrow enough that the folio stays over water and never covers the coast */
+  width: min(34%, 30rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1.7rem 1.8rem 1.8rem 0;
+  border-top: 2.5px solid var(--a-ink);
+  border-bottom: 2.5px solid var(--a-ink);
+  background: linear-gradient(rgba(236, 227, 208, 0.94), rgba(236, 227, 208, 0.88));
+  scrollbar-width: thin;
+  scrollbar-color: var(--a-rule) transparent;
+}
+
+.a-folio h1 {
+  margin: 0 0 0.2rem;
+  font-family: 'IM Fell Great Primer', Georgia, serif;
+  font-weight: 400;
+  font-size: clamp(1.7rem, 2.9vw, 2.5rem);
+  line-height: 1.05;
+}
+
+.a-folio-sub {
+  margin: 0 0 1.3rem;
+  font-style: italic;
+  color: var(--a-ink-soft);
+  font-size: 0.92rem;
+}
+
+.a-h2 {
+  margin: 1.7rem 0 0.7rem;
+  font-family: 'IM Fell English SC', serif;
+  font-weight: 400;
+  font-size: 0.8rem;
+  letter-spacing: 0.32em;
+  color: var(--a-rubric);
+  border-bottom: 1px solid var(--a-rule);
+  padding-bottom: 0.3rem;
+}
+
+.a-entry {
+  margin-bottom: 1.25rem;
+}
+
+.a-entry h3 {
+  margin: 0 0 0.18rem;
+  font-weight: 400;
+  font-size: 1.08rem;
+}
+
+.a-entry p {
+  margin: 0.24rem 0;
+  line-height: 1.55;
+  font-size: 0.95rem;
+}
+
+.a-entry ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.05rem;
+  line-height: 1.55;
+  font-size: 0.92rem;
+}
+
+.a-entry li {
+  margin-bottom: 0.24rem;
+}
+
+.a-meta {
+  color: var(--a-ink-soft);
+  font-size: 0.84rem;
+  font-style: italic;
+  line-height: 1.45;
+}
+
+.a-meta a {
+  color: var(--a-ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--a-rubric);
+}
+
+.a-prose {
+  line-height: 1.6;
+  max-width: 62ch;
+  font-size: 0.96rem;
+}
+
+/* project roll */
+
+.a-roll {
+  display: grid;
+  gap: 0;
+}
+
+.a-roll a {
+  display: grid;
+  gap: 0.16rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--a-rule);
+  color: var(--a-ink);
+  text-decoration: none;
+  transition: padding-left 260ms var(--a-ease);
+}
+
+.a-roll a:first-child {
+  border-top: 1px solid var(--a-rule);
+}
+
+.a-roll-no {
+  font-family: 'IM Fell English SC', serif;
+  font-size: 0.68rem;
+  letter-spacing: 0.28em;
+  color: var(--a-rubric);
+}
+
+.a-roll-title {
+  font-family: 'IM Fell Great Primer', Georgia, serif;
+  font-size: 1.2rem;
+  line-height: 1.15;
+}
+
+.a-roll-sum {
+  font-size: 0.86rem;
+  line-height: 1.42;
+  color: var(--a-ink-soft);
+}
+
+.a-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.7rem 1.1rem;
+  margin: 0 0 1.1rem;
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--a-rule);
+  border-bottom: 1px solid var(--a-rule);
+}
+
+.a-facts dt {
+  font-family: 'IM Fell English SC', serif;
+  font-size: 0.66rem;
+  letter-spacing: 0.2em;
+  color: var(--a-ink-soft);
+}
+
+.a-facts dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.93rem;
+}
+
+.a-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.4rem;
+  margin-top: 1.2rem;
+  align-items: baseline;
+}
+
+.a-btn {
+  font-family: 'IM Fell English SC', serif;
+  font-size: 0.82rem;
+  letter-spacing: 0.18em;
+  color: var(--a-ink);
+  text-decoration: none;
+  padding-bottom: 0.15rem;
+  border-bottom: 1.5px solid var(--a-rubric);
+  transition: color 220ms var(--a-ease);
+}
+
+.a-back {
+  display: inline-block;
+  margin-bottom: 0.8rem;
+  font-style: italic;
+  font-size: 0.86rem;
+  color: var(--a-ink-soft);
+  text-decoration: none;
+}
+
+.a-ticker {
+  position: absolute;
+  z-index: 4;
+  left: 5.2%;
+  bottom: 4.2%;
+  max-width: 34%;
+  font-size: 0.82rem;
+  font-style: italic;
+  color: var(--a-ink-soft);
+  text-decoration: none;
+}
+
+.a-ticker b {
+  font-family: 'IM Fell English SC', serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 0.7rem;
+  letter-spacing: 0.26em;
+  color: var(--a-rubric);
+}
+
+/* map lettering */
+
+.a-lbl {
+  font-family: 'IM Fell English SC', serif;
+  fill: var(--a-ink);
+}
+
+.a-lbl-region {
+  font-size: 25px;
+  letter-spacing: 0.38em;
+  fill: var(--a-ink-soft);
+}
+
+.a-lbl-city {
+  font-size: 14.5px;
+  letter-spacing: 0.14em;
+}
+
+.a-lbl-sea {
+  font-family: 'IM Fell Great Primer', Georgia, serif;
+  font-style: italic;
+  font-size: 29px;
+  letter-spacing: 0.2em;
+  fill: var(--a-ink-soft);
+  opacity: 0.72;
+}
+
+.a-lbl-terra {
+  font-family: 'IM Fell Great Primer', Georgia, serif;
+  font-style: italic;
+  font-size: 20px;
+  letter-spacing: 0.1em;
+  fill: var(--a-rubric);
+}
+
+.a-lbl-tiny {
+  font-family: 'IM Fell English', Georgia, serif;
+  font-style: italic;
+  font-size: 12.5px;
+  fill: var(--a-ink-soft);
+}
+
+/* ---------- hover, focus, motion ---------- */
+
+@media (hover: hover) and (pointer: fine) {
+  .a-index a:hover {
+    color: var(--a-ink);
+    border-bottom-color: var(--a-rule);
+  }
+  .a-socials a:hover,
+  .a-out:hover,
+  .a-meta a:hover,
+  .a-btn:hover,
+  .a-back:hover,
+  .a-ticker:hover {
+    color: var(--a-rubric);
+  }
+  .a-roll a:hover {
+    padding-left: 0.7rem;
+  }
+  .a-roll a:hover .a-roll-title {
+    color: var(--a-rubric);
+  }
+}
+
+.atl a:focus-visible {
+  outline: 2px solid var(--a-rubric);
+  outline-offset: 3px;
+}
+
+/* the plate is inked onto the page rather than sliding in */
+.a-ink-in {
+  animation: a-ink 620ms var(--a-ease) both;
+}
+
+@keyframes a-ink {
+  from {
+    opacity: 0;
+    filter: blur(1.5px);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .a-ink-in {
+    animation: none;
+  }
+  .a-roll a,
+  .a-index a {
+    transition: none;
+  }
+}
+
+/* ---------- responsive ---------- */
+
+/* On a phone the plate cannot hold both chart and text at a legible size, so it
+   stops being a backdrop and becomes a header band: the map is pinned to the top
+   at its true 16:10, and the furniture leaves the plate's coordinate space to
+   sit beneath it in the viewport's. */
+@media (max-width: 900px) {
+  .a-plate-wrap {
+    top: 0;
+    left: 0;
+    transform: none;
+    width: 100vw;
+    height: calc(100vw / 1.6);
+  }
+
+  .a-neatline {
+    inset: 4% 4% 0;
+    border-bottom: none;
+  }
+
+  .a-index {
+    position: fixed;
+    top: calc(100vw / 1.6 + 0.55rem);
+    left: 4%;
+    right: 4%;
+    grid-auto-flow: column;
+    justify-content: space-between;
+    justify-items: center;
+    gap: 0.6rem;
+  }
+
+  .a-index-tag {
+    display: none;
+  }
+
+  .a-cartouche,
+  .a-folio {
+    position: fixed;
+    top: calc(100vw / 1.6 + 2.7rem);
+    left: 4%;
+    right: 4%;
+    bottom: 3.1rem;
+    width: auto;
+    max-height: none;
+    overflow-y: auto;
+    padding-right: 0;
+  }
+
+  .a-cartouche {
+    padding-top: 1.2rem;
+    padding-bottom: 1.2rem;
+  }
+
+  .a-legend {
+    display: none;
+  }
+
+  .a-ticker {
+    position: fixed;
+    left: 4%;
+    right: 4%;
+    bottom: 0.7rem;
+    max-width: none;
+  }
+}

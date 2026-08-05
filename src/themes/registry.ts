@@ -27,6 +27,17 @@ export const themes: ThemeDescriptor[] = [
     load: () => import('./singularity'),
   },
   {
+    id: 'atlas',
+    name: 'Atlas',
+    description:
+      'The résumé as territory — a 17th-century chart with procedurally engraved coastlines.',
+    requirements: {},
+    // in build (PLAN Phase 5); reachable from the switcher until GATE 5b
+    weight: 5,
+    listed: true,
+    load: () => import('./atlas'),
+  },
+  {
     id: 'hold',
     name: 'Holding page',
     description: 'Minimal placeholder world while the real themes are built.',
