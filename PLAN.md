@@ -181,7 +181,25 @@ bootstrap the taste loop before heavy 3D investment.*
       ratio — map and furniture now share one 16:10 plate. Verified collision-free
       (land, lettering, panels) across 1.4/1.6/1.78 and all six routes; mobile
       turns the plate into a header band with the folio beneath.
-- [ ] Pan/zoom exploration (d3-zoom), markers as navigation, per-route charts
+- [x] One-continent rebuild 2026-08-05 (Damyan: everything on one landmass,
+      projects onto the mainland, interests offshore, traversable, real relief,
+      livelier sea). `relief.ts` derives **every** land feature from one shared
+      heightfield (fBm basins blended with ridged chains, forced to zero at the
+      waterline via a chamfer distance transform): contours by marching squares,
+      rivers by steepest-descent flow accumulation, Lehmann hachures down the
+      gradient, summits as thinned local maxima, town sites scored for gentle
+      low ground near the coast. That shared source is what makes it cohere —
+      rivers run down real slopes into real sea. Sea gained shore-following
+      contours (iso-lines of offshore distance) and distance-weighted stipple.
+      World is 2600×1625 with hand-rolled pan/zoom (`useMapView`, no d3 — ~100
+      lines, clamped to the world, zooms about the pointer, drag-vs-click
+      guarded); ink and lettering hold constant on screen via
+      `non-scaling-stroke` and 1/k font sizing. Projects are clickable towns.
+      14 relief tests (55 total), incl. the load-bearing invariant that every
+      river segment runs downhill. Verified in-browser: 9/9 towns on land, sea
+      lettering never on land, no label collisions, zoom clamps at both ends,
+      0.06 ms/reflow while panning.
+- [ ] Per-route charts (fly the view to the relevant province/town on navigation)
 - [ ] A11y: keyboard walk of regions + "read as document" mode (first-class, built
       alongside — a map is hostile to screen readers); print-quality static fallback
 - **GATE 5b — "atlas approved."**

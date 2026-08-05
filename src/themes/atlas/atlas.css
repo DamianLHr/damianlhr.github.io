@@ -42,6 +42,115 @@
   inset: 0;
   width: 100%;
   height: 100%;
+  touch-action: none;
+  cursor: grab;
+}
+
+.a-plate.a-grabbing {
+  cursor: grabbing;
+}
+
+/* ---------- towns ---------- */
+
+.a-town text {
+  paint-order: stroke;
+  stroke: var(--a-paper);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.a-town-link {
+  cursor: pointer;
+}
+
+.a-town-link text {
+  fill: var(--a-rubric);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .a-town-link:hover text {
+    fill: var(--a-ink);
+  }
+  .a-town-link:hover rect {
+    fill: var(--a-ink);
+  }
+}
+
+.a-town-link:focus-visible {
+  outline: 2px solid var(--a-rubric);
+  outline-offset: 2px;
+}
+
+/* ---------- compass & traversal tools ---------- */
+
+.a-compass {
+  position: absolute;
+  z-index: 3;
+  right: 6.5%;
+  top: 26%;
+  width: clamp(46px, 5vw, 72px);
+  aspect-ratio: 1;
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.a-compass svg {
+  width: 100%;
+  height: 100%;
+}
+
+.a-tools {
+  position: absolute;
+  z-index: 5;
+  left: 5.2%;
+  bottom: 5%;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.a-tools button {
+  font-family: 'IM Fell English SC', serif;
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  min-width: 1.9rem;
+  padding: 0.18rem 0.4rem;
+  color: var(--a-ink);
+  background: rgba(236, 227, 208, 0.85);
+  border: 1px solid var(--a-ink);
+  cursor: pointer;
+  transition: background 220ms var(--a-ease);
+}
+
+.a-tools button:active {
+  background: var(--a-rubric);
+  color: var(--a-paper);
+}
+
+.a-scale {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: 0.4rem;
+  font-family: 'IM Fell English SC', serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  color: var(--a-ink-soft);
+}
+
+.a-scale i {
+  display: block;
+  height: 6px;
+  border: 1px solid var(--a-ink);
+  border-top: 0;
+  transition: width 220ms var(--a-ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .a-tools button:hover {
+    background: var(--a-paper);
+    border-color: var(--a-rubric);
+  }
 }
 
 .a-grain {
@@ -435,7 +544,8 @@
   position: absolute;
   z-index: 4;
   left: 5.2%;
-  bottom: 4.2%;
+  /* clears the traversal tools, which own the bottom-left corner */
+  bottom: 10.5%;
   max-width: 34%;
   font-size: 0.82rem;
   font-style: italic;
@@ -490,8 +600,41 @@
 .a-lbl-tiny {
   font-family: 'IM Fell English', Georgia, serif;
   font-style: italic;
-  font-size: 12.5px;
   fill: var(--a-ink-soft);
+}
+
+.a-lbl-town {
+  font-family: 'IM Fell English SC', serif;
+  letter-spacing: 0.1em;
+}
+
+.a-lbl-isle {
+  font-family: 'IM Fell Great Primer', Georgia, serif;
+  font-style: italic;
+  fill: var(--a-ink-soft);
+  letter-spacing: 0.08em;
+  paint-order: stroke;
+  stroke: var(--a-paper);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+/* map lettering is sized in JS to hold constant on screen while zooming */
+.a-lbl-region,
+.a-lbl-city,
+.a-lbl-sea,
+.a-lbl-terra,
+.a-lbl-tiny,
+.a-lbl-town,
+.a-lbl-isle {
+  font-size: inherit;
+}
+
+.a-lbl-region {
+  paint-order: stroke;
+  stroke: var(--a-paper);
+  stroke-width: 4px;
+  stroke-linejoin: round;
 }
 
 /* ---------- hover, focus, motion ---------- */
@@ -555,12 +698,19 @@
    at its true 16:10, and the furniture leaves the plate's coordinate space to
    sit beneath it in the viewport's. */
 @media (max-width: 900px) {
+  /* one source of truth for how much of the screen the chart keeps; the SVG
+     slices to cover it, so a taller band is a wider window onto the world
+     rather than a letterbox */
+  .atl {
+    --a-band-h: 38dvh;
+  }
+
   .a-plate-wrap {
     top: 0;
     left: 0;
     transform: none;
     width: 100vw;
-    height: calc(100vw / 1.6);
+    height: var(--a-band-h);
   }
 
   .a-neatline {
@@ -570,7 +720,7 @@
 
   .a-index {
     position: fixed;
-    top: calc(100vw / 1.6 + 0.55rem);
+    top: calc(var(--a-band-h) + 0.55rem);
     left: 4%;
     right: 4%;
     grid-auto-flow: column;
@@ -586,7 +736,7 @@
   .a-cartouche,
   .a-folio {
     position: fixed;
-    top: calc(100vw / 1.6 + 2.7rem);
+    top: calc(var(--a-band-h) + 2.7rem);
     left: 4%;
     right: 4%;
     bottom: 3.1rem;
