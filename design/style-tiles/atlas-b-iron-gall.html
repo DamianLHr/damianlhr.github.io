@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Atlas tile B · Iron Gall</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=IM+Fell+English+SC&family=IM+Fell+Great+Primer:ital@0;1&family=IM+Fell+Great+Primer+SC&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper: #ece3d0;
+    --ink: #2c2218;        /* iron gall, oxidised brown-black */
+    --ink-soft: #5e4f3c;
+    --rubric: #a5301b;     /* the one permitted colour */
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    background: #1d1811;
+    color: var(--ink);
+    font-family: 'IM Fell English', Georgia, serif;
+    display: grid; place-items: center; padding: 1.5rem;
+  }
+  .sheet {
+    position: relative;
+    width: min(1600px, 100%);
+    aspect-ratio: 16 / 10;
+    /* laid paper: fine laid lines + widely spaced chain lines */
+    background:
+      repeating-linear-gradient(90deg, rgba(44,34,24,.02) 0 1px, transparent 1px 5px),
+      repeating-linear-gradient(0deg,  rgba(44,34,24,.055) 0 1.5px, transparent 1.5px 34px),
+      var(--paper);
+    box-shadow: 0 30px 90px rgba(0,0,0,.6);
+    overflow: hidden;
+  }
+  .sheet svg.map { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .grain { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: multiply; opacity: .38; }
+  /* plate border: the engraved neatline + plate mark */
+  .neatline {
+    position: absolute; inset: 2.1%;
+    border: 1px solid var(--ink);
+    outline: 3px solid var(--ink); outline-offset: 4px;
+    pointer-events: none; opacity: .8;
+  }
+  /* --- cartouche: a plain ruled block, no scrollwork --- */
+  .cartouche {
+    position: absolute; left: 5.2%; top: 8%;
+    width: 30%;
+    padding: 1.9rem 0 1.7rem;
+    border-top: 2.5px solid var(--ink);
+    border-bottom: 2.5px solid var(--ink);
+    background: linear-gradient(rgba(236,227,208,.9), rgba(236,227,208,.82));
+  }
+  .cartouche::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: 4px;
+    border-bottom: 1px solid var(--ink);
+  }
+  .cart-eyebrow {
+    font-family: 'IM Fell English SC', serif;
+    font-size: .78rem; letter-spacing: .42em; text-align: center;
+    color: var(--rubric); margin-bottom: .85rem;
+  }
+  .cart-title {
+    font-family: 'IM Fell Great Primer', serif;
+    font-size: clamp(1.8rem, 3vw, 2.85rem);
+    line-height: 1.02; text-align: center; font-weight: 400;
+  }
+  .cart-title em { font-style: italic; display: block; font-size: .52em; margin-top: .35rem; color: var(--ink-soft); }
+  .cart-body {
+    margin-top: 1.1rem; font-size: 1.05rem; line-height: 1.62;
+    text-align: justify; hyphens: auto;
+  }
+  .cart-body .drop {
+    float: left; font-family: 'IM Fell Great Primer', serif;
+    font-size: 3.6rem; line-height: .76; padding: .1em .13em 0 0;
+    color: var(--rubric);
+  }
+  .cart-foot {
+    margin-top: 1rem; text-align: center; font-style: italic;
+    font-size: .88rem; color: var(--ink-soft);
+  }
+  /* --- legend: hatch specimens, not colour --- */
+  .legend {
+    position: absolute; right: 5%; bottom: 8%;
+    width: 25%;
+    padding-top: .9rem;
+    border-top: 2.5px solid var(--ink);
+  }
+  .legend h3 {
+    font-family: 'IM Fell English SC', serif; font-weight: 400;
+    font-size: .88rem; letter-spacing: .34em; margin-bottom: .8rem; color: var(--rubric);
+  }
+  .legend .row { display: grid; grid-template-columns: 2.7rem 1fr; gap: .7rem; align-items: center; margin-bottom: .5rem; }
+  .legend .row svg { display: block; border: .8px solid var(--ink); }
+  .legend .row span { font-size: .86rem; line-height: 1.3; }
+  .legend .note {
+    margin-top: .85rem; padding-top: .6rem; border-top: .8px solid rgba(44,34,24,.4);
+    font-size: .82rem; font-style: italic; color: var(--ink-soft); line-height: 1.45;
+  }
+  .caption {
+    position: absolute; left: 5.2%; bottom: 4.4%;
+    font-family: 'IM Fell English SC', serif;
+    font-size: .8rem; letter-spacing: .22em; color: var(--ink-soft);
+  }
+  .caption b { font-weight: 400; color: var(--rubric); }
+  .lbl { font-family: 'IM Fell English SC', serif; fill: var(--ink); }
+  .lbl-region { font-size: 25px; letter-spacing: .38em; fill: var(--ink-soft); }
+  .lbl-city  { font-size: 14.5px; letter-spacing: .14em; }
+  .lbl-sea   { font-family: 'IM Fell Great Primer', serif; font-style: italic;
+               font-size: 29px; fill: var(--ink-soft); letter-spacing: .2em; opacity: .75; }
+  .lbl-terra { font-family: 'IM Fell Great Primer', serif; font-style: italic;
+               font-size: 20px; fill: var(--rubric); letter-spacing: .1em; }
+  .lbl-tiny  { font-family: 'IM Fell English', serif; font-style: italic; font-size: 12.5px; fill: var(--ink-soft); }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <svg class="map" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs>
+      <filter id="rough" x="-6%" y="-6%" width="112%" height="112%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="4" seed="19" result="n"/>
+        <feDisplacementMap in="SourceGraphic" in2="n" scale="5" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>
+      <filter id="roughSoft" x="-6%" y="-6%" width="112%" height="112%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="3" seed="8" result="n"/>
+        <feDisplacementMap in="SourceGraphic" in2="n" scale="2.6" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>
+
+      <!-- tonal engraving: density alone carries the value -->
+      <pattern id="hLight" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
+        <line x1="0" y1="0" x2="0" y2="9" stroke="#2c2218" stroke-width=".55" opacity=".55"/>
+      </pattern>
+      <pattern id="hMed" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
+        <line x1="0" y1="0" x2="0" y2="5" stroke="#2c2218" stroke-width=".55" opacity=".6"/>
+      </pattern>
+      <pattern id="hCross" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
+        <line x1="0" y1="0" x2="0" y2="5" stroke="#2c2218" stroke-width=".55" opacity=".62"/>
+        <line x1="0" y1="0" x2="5" y2="0" stroke="#2c2218" stroke-width=".55" opacity=".62"/>
+      </pattern>
+
+      <path id="coast" d="M 120 265 C 190 210, 285 198, 355 236 C 410 266, 432 318, 498 322
+        C 556 326, 592 280, 652 292 C 712 304, 742 360, 716 416 C 694 464, 632 478, 606 530
+        C 580 582, 616 628, 590 680 C 564 732, 482 736, 436 778 C 390 820, 396 876, 338 892
+        C 276 909, 208 876, 162 824 C 116 772, 100 690, 110 606 C 120 522, 88 440, 104 356
+        C 112 314, 98 290, 120 265 Z" />
+      <path id="isle1" d="M 1200 208 C 1236 190, 1284 200, 1300 230 C 1316 260, 1294 288, 1258 291
+        C 1222 294, 1188 272, 1186 243 C 1185 226, 1188 214, 1200 208 Z" />
+      <path id="isle2" d="M 1345 330 C 1381 314, 1423 328, 1430 356 C 1437 384, 1412 408, 1378 405
+        C 1344 402, 1326 377, 1332 353 C 1335 342, 1339 333, 1345 330 Z" />
+      <path id="isle3" d="M 1180 448 C 1228 424, 1292 438, 1313 474 C 1334 511, 1310 553, 1260 562
+        C 1210 571, 1164 543, 1159 503 C 1156 478, 1165 456, 1180 448 Z" />
+      <path id="isle4" d="M 1412 540 C 1444 527, 1479 540, 1484 565 C 1489 590, 1466 611, 1437 607
+        C 1408 603, 1395 582, 1400 561 C 1403 551, 1406 543, 1412 540 Z" />
+      <path id="isle5" d="M 1420 178 C 1446 164, 1480 176, 1485 197 C 1490 218, 1470 236, 1443 233
+        C 1416 230, 1404 210, 1409 192 C 1411 185, 1415 180, 1420 178 Z" />
+      <path id="terra" d="M 632 172 C 720 118, 852 106, 952 130 C 1024 148, 1072 132, 1104 108" />
+    </defs>
+
+    <!-- open sea: left bare, as engravers did -->
+
+    <g filter="url(#rough)">
+      <g transform="translate(510,182) scale(0.8)">
+        <!-- coastal shading: successive parallel lines following the shore -->
+        <g fill="none" stroke="#2c2218">
+          <use href="#coast" stroke-width="15" opacity=".05"/>
+          <use href="#coast" stroke-width="10" opacity=".07"/>
+          <use href="#coast" stroke-width="5.5" opacity=".1"/>
+        </g>
+        <use href="#coast" fill="url(#hLight)"/>
+        <use href="#coast" fill="none" stroke="#2c2218" stroke-width="2.8"/>
+        <path d="M 128 520 C 240 496, 360 540, 470 512 C 540 494, 578 520, 604 540"
+              fill="none" stroke="#2c2218" stroke-width="1.6" stroke-dasharray="12 7" opacity=".8"/>
+        <!-- relief hachuring on the southern province -->
+        <g stroke="#2c2218" stroke-width=".9" opacity=".5">
+          <path d="M 210 610 l 0 26 M 236 604 l 0 30 M 262 612 l 0 24 M 288 600 l 0 32
+                   M 314 614 l 0 22 M 340 606 l 0 28 M 366 618 l 0 20 M 392 608 l 0 26"/>
+          <path d="M 250 676 l 0 24 M 276 668 l 0 30 M 302 680 l 0 22 M 328 670 l 0 28
+                   M 354 682 l 0 20 M 380 672 l 0 26"/>
+        </g>
+      </g>
+
+      <g>
+        <use href="#isle1" fill="url(#hMed)"/><use href="#isle1" fill="none" stroke="#2c2218" stroke-width="2"/>
+        <use href="#isle2" fill="url(#hCross)"/><use href="#isle2" fill="none" stroke="#2c2218" stroke-width="2"/>
+        <use href="#isle3" fill="url(#hMed)"/><use href="#isle3" fill="none" stroke="#2c2218" stroke-width="2"/>
+        <use href="#isle4" fill="url(#hCross)"/><use href="#isle4" fill="none" stroke="#2c2218" stroke-width="2"/>
+        <use href="#isle5" fill="url(#hMed)"/><use href="#isle5" fill="none" stroke="#2c2218" stroke-width="2"/>
+      </g>
+
+      <use href="#terra" fill="none" stroke="var(--rubric)" stroke-width="1.8" stroke-dasharray="14 10" opacity=".8"/>
+    </g>
+
+    <!-- trade routes, ruled in rubric -->
+    <g fill="none" stroke="var(--rubric)" stroke-width="1" stroke-dasharray="5 7" opacity=".72" filter="url(#roughSoft)">
+      <path d="M 1080 600 C 1120 560, 1160 520, 1180 500"/>
+      <path d="M 1075 570 C 1160 500, 1290 400, 1340 365"/>
+      <path d="M 1060 520 C 1110 430, 1170 300, 1210 255"/>
+      <path d="M 1090 650 C 1200 650, 1350 600, 1410 578"/>
+      <path d="M 1050 500 C 1170 390, 1340 250, 1415 205"/>
+    </g>
+
+    <!-- austere compass: a north marker and a cross, nothing more -->
+    <g transform="translate(1000,240)" filter="url(#roughSoft)">
+      <circle r="40" fill="none" stroke="#2c2218" stroke-width=".9" opacity=".6"/>
+      <line x1="-52" y1="0" x2="52" y2="0" stroke="#2c2218" stroke-width=".9" opacity=".6"/>
+      <line x1="0" y1="-52" x2="0" y2="52" stroke="#2c2218" stroke-width=".9" opacity=".6"/>
+      <path d="M 0 -50 L 7 -14 L 0 -6 L -7 -14 Z" fill="var(--rubric)"/>
+      <text class="lbl" x="0" y="-58" text-anchor="middle" style="font-size:14px;fill:var(--rubric)">N</text>
+    </g>
+
+    <text class="lbl lbl-sea" x="320" y="606" text-anchor="middle">Mare Incognitum</text>
+    <text class="lbl lbl-region" x="774" y="464" text-anchor="middle">EDUCATION</text>
+    <text class="lbl lbl-region" x="795" y="726" text-anchor="middle">EXPERIENCE</text>
+    <text class="lbl lbl-terra" x="800" y="212" text-anchor="middle">Terra Incognita</text>
+    <text class="lbl lbl-tiny"  x="800" y="234" text-anchor="middle">— the Delft coast, not yet surveyed —</text>
+
+    <g class="lbl lbl-city">
+      <circle cx="824" cy="422" r="3.2" fill="#2c2218"/><text x="836" y="427">EINDHOVEN</text>
+      <circle cx="750" cy="763" r="3.2" fill="#2c2218"/><text x="762" y="768">SOFIA</text>
+      <circle cx="692" cy="694" r="2.4" fill="#2c2218"/><text x="702" y="699" style="font-size:12px">INDEAVR</text>
+      <circle cx="963" cy="571" r="3.2" fill="#2c2218"/><text x="975" y="576">TOTEM</text>
+    </g>
+    <g class="lbl lbl-tiny">
+      <text x="1243" y="314" text-anchor="middle">Don’t Break Glass</text>
+      <text x="1447" y="258" text-anchor="middle">Olympian Onslaught</text>
+      <text x="1381" y="428" text-anchor="middle">Kill Bunny</text>
+      <text x="1245" y="590" text-anchor="middle">Digital Twinning</text>
+      <text x="1442" y="632" text-anchor="middle">Blood of Hedon</text>
+    </g>
+  </svg>
+
+  <svg class="grain" aria-hidden="true">
+    <filter id="grainF"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="4" seed="12"/><feColorMatrix type="saturate" values="0"/></filter>
+    <rect width="100%" height="100%" filter="url(#grainF)" opacity=".2"/>
+  </svg>
+
+  <div class="neatline"></div>
+
+  <div class="cartouche">
+    <p class="cart-eyebrow">TABULA I</p>
+    <h1 class="cart-title">Damyan Hristov<em>his territories, described</em></h1>
+    <p class="cart-body"><span class="drop">G</span>ames, engines and experimental graphics. Herein the provinces of study and of labour, the isles of work already shipped, and — ruled in red, for it rests on report rather than survey — the coast toward Delft.</p>
+    <p class="cart-foot">Eindhoven · MMXXVI</p>
+  </div>
+
+  <div class="legend">
+    <h3>EXPLANATIO</h3>
+    <div class="row">
+      <svg width="42" height="15"><rect width="42" height="15" fill="url(#hLight)"/></svg>
+      <span>Provinces of study &amp; of labour</span>
+    </div>
+    <div class="row">
+      <svg width="42" height="15"><rect width="42" height="15" fill="url(#hMed)"/></svg>
+      <span>Isles of shipped work</span>
+    </div>
+    <div class="row">
+      <svg width="42" height="15"><rect width="42" height="15" fill="url(#hCross)"/></svg>
+      <span>Isles of university making</span>
+    </div>
+    <div class="row">
+      <svg width="42" height="15" style="border:0"><line x1="0" y1="8" x2="42" y2="8" stroke="#a5301b" stroke-width="1.6" stroke-dasharray="7 5"/></svg>
+      <span>Reported, unsurveyed — the Delft passage</span>
+    </div>
+    <div class="row">
+      <svg width="42" height="15" style="border:0"><line x1="0" y1="8" x2="42" y2="8" stroke="#a5301b" stroke-width="1" stroke-dasharray="4 5"/></svg>
+      <span>Routes: a tongue to the work that proves it</span>
+    </div>
+    <p class="note">Bulgarian (native) · English (C1) · German (B1). Java · C#&nbsp;&amp;&nbsp;Unity · Python; C++&nbsp;&amp;&nbsp;Vulkan in the learning.</p>
+  </div>
+
+  <p class="caption">TILE <b>B</b> · IRON GALL · laid paper, one rubric, tone by hatching alone</p>
+</div>
+</body>
+</html>

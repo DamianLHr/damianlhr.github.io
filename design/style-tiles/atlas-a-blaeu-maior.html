@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Atlas tile A · Blaeu Maior</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=IM+Fell+English+SC&family=IM+Fell+French+Canon:ital@0;1&family=IM+Fell+French+Canon+SC&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper: #f0e2c2;
+    --paper-deep: #e4d2ab;
+    --ink: #493420;
+    --ink-soft: #6d5237;
+    --gilt: #b08a2c;
+    --wash-sage: #a8b78e;
+    --wash-rose: #cfa091;
+    --wash-ochre: #d9bd76;
+    --wash-sea: #9fb3bb;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    background: #2a2018;
+    color: var(--ink);
+    font-family: 'IM Fell English', Georgia, serif;
+    display: grid;
+    place-items: center;
+    padding: 1.5rem;
+  }
+  .sheet {
+    position: relative;
+    width: min(1600px, 100%);
+    aspect-ratio: 16 / 10;
+    background: var(--paper);
+    box-shadow: 0 30px 90px rgba(0,0,0,.55);
+    overflow: hidden;
+  }
+  .sheet svg.map { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .grain {
+    position: absolute; inset: 0; pointer-events: none;
+    mix-blend-mode: multiply; opacity: .5;
+  }
+  /* --- cartouche --- */
+  .cartouche {
+    position: absolute;
+    left: 3.2%; top: 6%;
+    width: 33%;
+    padding: 2.1rem 2.2rem 1.9rem;
+    background:
+      linear-gradient(160deg, rgba(244,233,209,.96), rgba(232,214,178,.93));
+    border: 1.5px solid var(--ink);
+    outline: 4px double var(--ink);
+    outline-offset: 5px;
+    box-shadow: 0 8px 26px rgba(73,52,32,.28);
+  }
+  .cartouche::before, .cartouche::after {
+    content: '❦';
+    position: absolute; left: 50%; transform: translateX(-50%);
+    color: var(--gilt); font-size: 1.15rem; line-height: 1;
+    background: var(--paper); padding: 0 .5rem;
+  }
+  .cartouche::before { top: -.72rem; }
+  .cartouche::after  { bottom: -.72rem; }
+  .cart-eyebrow {
+    font-family: 'IM Fell English SC', serif;
+    font-size: .82rem; letter-spacing: .3em;
+    color: var(--ink-soft); text-align: center; margin-bottom: .7rem;
+  }
+  .cart-title {
+    font-family: 'IM Fell French Canon', serif;
+    font-size: clamp(1.9rem, 3.1vw, 3rem);
+    line-height: .98; text-align: center; letter-spacing: .01em;
+  }
+  .cart-rule {
+    display: flex; align-items: center; gap: .6rem;
+    margin: .95rem 0 .85rem; color: var(--gilt);
+  }
+  .cart-rule::before, .cart-rule::after {
+    content: ''; flex: 1; height: 1px; background: currentColor; opacity: .55;
+  }
+  .cart-body { font-size: 1.02rem; line-height: 1.5; text-align: justify; hyphens: auto; }
+  .cart-body .drop {
+    float: left;
+    font-family: 'IM Fell French Canon', serif;
+    font-size: 3.3rem; line-height: .78;
+    padding: .12em .14em 0 0; color: var(--gilt);
+  }
+  .cart-foot {
+    margin-top: .9rem; font-style: italic;
+    font-size: .9rem; color: var(--ink-soft); text-align: center;
+  }
+  /* --- legend --- */
+  .legend {
+    position: absolute; right: 3%; bottom: 5.5%;
+    width: 25.5%;
+    padding: 1.15rem 1.3rem 1.25rem;
+    background: rgba(244,233,209,.94);
+    border: 1.5px solid var(--ink);
+    outline: 1px solid var(--ink); outline-offset: 3px;
+  }
+  .legend h3 {
+    font-family: 'IM Fell English SC', serif;
+    font-weight: 400; font-size: .95rem; letter-spacing: .22em;
+    text-align: center; margin-bottom: .7rem;
+  }
+  .legend dl { display: grid; gap: .42rem; font-size: .88rem; }
+  .legend .row { display: grid; grid-template-columns: 2.4rem 1fr; align-items: center; gap: .6rem; }
+  .legend .row i { display: block; height: 12px; border: 1px solid var(--ink); }
+  .legend .row span { line-height: 1.25; }
+  .legend .note {
+    margin-top: .75rem; padding-top: .6rem; border-top: 1px solid rgba(73,52,32,.35);
+    font-style: italic; font-size: .82rem; color: var(--ink-soft);
+  }
+  /* --- specimen caption --- */
+  .caption {
+    position: absolute; left: 3.2%; bottom: 4.2%;
+    font-family: 'IM Fell English SC', serif;
+    font-size: .82rem; letter-spacing: .2em; color: var(--ink-soft);
+  }
+  .caption b { font-weight: 400; color: var(--ink); }
+  /* map lettering */
+  .lbl { font-family: 'IM Fell English SC', serif; fill: var(--ink); }
+  .lbl-region { font-size: 26px; letter-spacing: .34em; fill: var(--ink-soft); }
+  .lbl-city  { font-size: 15px; letter-spacing: .12em; }
+  .lbl-sea   { font-family: 'IM Fell French Canon', serif; font-style: italic;
+               font-size: 30px; fill: #6f8590; letter-spacing: .18em; }
+  .lbl-terra { font-family: 'IM Fell French Canon', serif; font-style: italic;
+               font-size: 21px; fill: var(--ink-soft); letter-spacing: .1em; }
+  .lbl-tiny  { font-family: 'IM Fell English', serif; font-style: italic; font-size: 12.5px; fill: var(--ink-soft); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <svg class="map" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs>
+      <filter id="rough" x="-6%" y="-6%" width="112%" height="112%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.026" numOctaves="4" seed="11" result="n"/>
+        <feDisplacementMap in="SourceGraphic" in2="n" scale="6" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>
+      <filter id="roughSoft" x="-6%" y="-6%" width="112%" height="112%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="3" seed="4" result="n"/>
+        <feDisplacementMap in="SourceGraphic" in2="n" scale="3" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>
+
+      <pattern id="hatchLand" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(38)">
+        <line x1="0" y1="0" x2="0" y2="7" stroke="#493420" stroke-width=".5" opacity=".33"/>
+      </pattern>
+      <pattern id="stippleSea" width="14" height="14" patternUnits="userSpaceOnUse">
+        <circle cx="3" cy="3" r=".8" fill="#6f8590" opacity=".35"/>
+        <circle cx="10" cy="9" r=".7" fill="#6f8590" opacity=".28"/>
+      </pattern>
+
+      <!-- Geography is laid out around the furniture: the cartouche owns the
+           upper-left sea, the legend the lower-right sea. No land under either. -->
+      <path id="coast" d="M 120 265 C 190 210, 285 198, 355 236 C 410 266, 432 318, 498 322
+        C 556 326, 592 280, 652 292 C 712 304, 742 360, 716 416 C 694 464, 632 478, 606 530
+        C 580 582, 616 628, 590 680 C 564 732, 482 736, 436 778 C 390 820, 396 876, 338 892
+        C 276 909, 208 876, 162 824 C 116 772, 100 690, 110 606 C 120 522, 88 440, 104 356
+        C 112 314, 98 290, 120 265 Z" />
+      <path id="isle1" d="M 1200 208 C 1236 190, 1284 200, 1300 230 C 1316 260, 1294 288, 1258 291
+        C 1222 294, 1188 272, 1186 243 C 1185 226, 1188 214, 1200 208 Z" />
+      <path id="isle2" d="M 1345 330 C 1381 314, 1423 328, 1430 356 C 1437 384, 1412 408, 1378 405
+        C 1344 402, 1326 377, 1332 353 C 1335 342, 1339 333, 1345 330 Z" />
+      <path id="isle3" d="M 1180 448 C 1228 424, 1292 438, 1313 474 C 1334 511, 1310 553, 1260 562
+        C 1210 571, 1164 543, 1159 503 C 1156 478, 1165 456, 1180 448 Z" />
+      <path id="isle4" d="M 1412 540 C 1444 527, 1479 540, 1484 565 C 1489 590, 1466 611, 1437 607
+        C 1408 603, 1395 582, 1400 561 C 1403 551, 1406 543, 1412 540 Z" />
+      <path id="isle5" d="M 1420 178 C 1446 164, 1480 176, 1485 197 C 1490 218, 1470 236, 1443 233
+        C 1416 230, 1404 210, 1409 192 C 1411 185, 1415 180, 1420 178 Z" />
+      <path id="terra" d="M 632 172 C 720 118, 852 106, 952 130 C 1024 148, 1072 132, 1104 108" />
+    </defs>
+
+    <!-- sea -->
+    <rect width="1600" height="1000" fill="#dfd0ae"/>
+    <rect width="1600" height="1000" fill="url(#stippleSea)"/>
+
+    <!-- rhumb lines from the compass -->
+    <g stroke="#8d7550" stroke-width=".7" opacity=".3">
+      <g transform="translate(1000,240)">
+        <line x1="-1400" y1="0" x2="1400" y2="0"/><line x1="0" y1="-1200" x2="0" y2="1200"/>
+        <line x1="-990" y1="-990" x2="990" y2="990"/><line x1="-990" y1="990" x2="990" y2="-990"/>
+        <line x1="-1300" y1="-540" x2="1300" y2="540"/><line x1="-1300" y1="540" x2="1300" y2="-540"/>
+        <line x1="-540" y1="-1300" x2="540" y2="1300"/><line x1="-540" y1="1300" x2="540" y2="-1300"/>
+      </g>
+    </g>
+
+    <g filter="url(#rough)">
+      <!-- mainland, seated clear of the cartouche -->
+      <g transform="translate(510,182) scale(0.8)">
+        <g fill="none" stroke="#493420">
+          <use href="#coast" stroke-width="17" opacity=".05"/>
+          <use href="#coast" stroke-width="11" opacity=".08"/>
+          <use href="#coast" stroke-width="6"  opacity=".12"/>
+        </g>
+        <use href="#coast" fill="var(--wash-sage)" opacity=".55"/>
+        <use href="#coast" fill="url(#hatchLand)"/>
+        <use href="#coast" fill="none" stroke="#493420" stroke-width="2.6"/>
+        <!-- provincial division: education (north) / experience (south) -->
+        <path d="M 128 520 C 240 496, 360 540, 470 512 C 540 494, 578 520, 604 540"
+              fill="none" stroke="#493420" stroke-width="1.5" stroke-dasharray="11 6" opacity=".75"/>
+      </g>
+
+      <!-- islands: the projects archipelago -->
+      <g>
+        <use href="#isle1" fill="var(--wash-rose)" opacity=".62"/><use href="#isle1" fill="url(#hatchLand)"/><use href="#isle1" fill="none" stroke="#493420" stroke-width="1.8"/>
+        <use href="#isle2" fill="var(--wash-ochre)" opacity=".62"/><use href="#isle2" fill="url(#hatchLand)"/><use href="#isle2" fill="none" stroke="#493420" stroke-width="1.8"/>
+        <use href="#isle3" fill="var(--wash-rose)" opacity=".5"/><use href="#isle3" fill="url(#hatchLand)"/><use href="#isle3" fill="none" stroke="#493420" stroke-width="1.8"/>
+        <use href="#isle4" fill="var(--wash-ochre)" opacity=".5"/><use href="#isle4" fill="url(#hatchLand)"/><use href="#isle4" fill="none" stroke="#493420" stroke-width="1.8"/>
+        <use href="#isle5" fill="var(--wash-sage)" opacity=".6"/><use href="#isle5" fill="url(#hatchLand)"/><use href="#isle5" fill="none" stroke="#493420" stroke-width="1.8"/>
+      </g>
+
+      <!-- terra incognita: the Delft coast, speculative -->
+      <use href="#terra" fill="none" stroke="#493420" stroke-width="1.6" stroke-dasharray="13 9" opacity=".62"/>
+    </g>
+
+    <!-- trade routes: proficiency → the projects that prove it -->
+    <g fill="none" stroke="#8b3a2a" stroke-width="1.15" stroke-dasharray="6 6" opacity=".62" filter="url(#roughSoft)">
+      <path d="M 1080 600 C 1120 560, 1160 520, 1180 500"/>
+      <path d="M 1075 570 C 1160 500, 1290 400, 1340 365"/>
+      <path d="M 1060 520 C 1110 430, 1170 300, 1210 255"/>
+      <path d="M 1090 650 C 1200 650, 1350 600, 1410 578"/>
+      <path d="M 1050 500 C 1170 390, 1340 250, 1415 205"/>
+    </g>
+
+    <!-- compass rose -->
+    <g transform="translate(1000,240)" filter="url(#roughSoft)">
+      <circle r="62" fill="none" stroke="#493420" stroke-width="1.1" opacity=".8"/>
+      <circle r="47" fill="none" stroke="#493420" stroke-width=".7" opacity=".6"/>
+      <g fill="#493420">
+        <path d="M 0 -60 L 11 -12 L 0 0 L -11 -12 Z" opacity=".92"/>
+        <path d="M 0 60 L 11 12 L 0 0 L -11 12 Z" opacity=".5"/>
+        <path d="M -60 0 L -12 -11 L 0 0 L -12 11 Z" opacity=".5"/>
+        <path d="M 60 0 L 12 -11 L 0 0 L 12 11 Z" opacity=".5"/>
+      </g>
+      <g fill="var(--gilt)" opacity=".85">
+        <path d="M 0 -60 L 11 -12 L 0 0 Z"/>
+      </g>
+      <text class="lbl lbl-tiny" x="0" y="-70" text-anchor="middle" style="font-size:15px">N</text>
+    </g>
+
+    <!-- sea monster, in the open water below the cartouche -->
+    <g transform="translate(150,700)" fill="none" stroke="#493420" stroke-width="1.5" opacity=".55" filter="url(#roughSoft)">
+      <path d="M 0 0 C 26 -22, 52 18, 82 -6 C 104 -24, 122 -6, 132 6"/>
+      <path d="M 132 6 C 142 -2, 152 -1, 156 6 C 150 10, 140 12, 132 6 Z" fill="#493420"/>
+      <path d="M 8 -4 C 14 -16, 26 -18, 30 -10"/>
+      <path d="M 58 6 C 64 -6, 76 -8, 80 0"/>
+    </g>
+
+    <!-- lettering -->
+    <text class="lbl lbl-sea" x="320" y="606" text-anchor="middle">Mare Incognitum</text>
+    <text class="lbl lbl-region" x="774" y="464" text-anchor="middle">EDUCATION</text>
+    <text class="lbl lbl-region" x="795" y="726" text-anchor="middle">EXPERIENCE</text>
+    <text class="lbl lbl-terra" x="800" y="212" text-anchor="middle">Terra Incognita</text>
+    <text class="lbl lbl-tiny"  x="800" y="234" text-anchor="middle">— the Delft coast, not yet charted —</text>
+
+    <g class="lbl lbl-city">
+      <circle cx="824" cy="422" r="3.4" fill="#493420"/><text x="836" y="427">EINDHOVEN</text>
+      <circle cx="750" cy="763" r="3.4" fill="#493420"/><text x="762" y="768">SOFIA</text>
+      <circle cx="692" cy="694" r="2.6" fill="#493420"/><text x="702" y="699" style="font-size:12.5px">INDEAVR</text>
+      <circle cx="963" cy="571" r="3.4" fill="#493420"/><text x="975" y="576">TOTEM</text>
+    </g>
+    <g class="lbl lbl-tiny">
+      <text x="1243" y="314" text-anchor="middle">Don’t Break Glass</text>
+      <text x="1447" y="258" text-anchor="middle">Olympian Onslaught</text>
+      <text x="1381" y="428" text-anchor="middle">Kill Bunny</text>
+      <text x="1245" y="590" text-anchor="middle">Digital Twinning</text>
+      <text x="1442" y="632" text-anchor="middle">Blood of Hedon</text>
+    </g>
+  </svg>
+
+  <svg class="grain" aria-hidden="true">
+    <filter id="grainF"><feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="4" seed="5"/><feColorMatrix type="saturate" values="0"/></filter>
+    <rect width="100%" height="100%" filter="url(#grainF)" opacity=".22"/>
+  </svg>
+
+  <div class="cartouche">
+    <p class="cart-eyebrow">CHART THE FIRST</p>
+    <h1 class="cart-title">Damyan<br/>Hristov</h1>
+    <div class="cart-rule">✦</div>
+    <p class="cart-body"><span class="drop">G</span>ames, engines and experimental graphics. Read here the territories of a Computer Science and Engineering student of Eindhoven, his provinces of learning and of labour, the archipelago of his works, and beyond the eastern rhumb that coast which is not yet charted.</p>
+    <p class="cart-foot">Drawn at Eindhoven · Anno MMXXVI</p>
+  </div>
+
+  <div class="legend">
+    <h3>EXPLANATIO</h3>
+    <dl>
+      <div class="row"><i style="background:var(--wash-sage)"></i><span>Provinces of study &amp; of labour</span></div>
+      <div class="row"><i style="background:var(--wash-rose)"></i><span>Isles of shipped work</span></div>
+      <div class="row"><i style="background:var(--wash-ochre)"></i><span>Isles of university making</span></div>
+      <div class="row"><i style="border-style:dashed;background:transparent"></i><span>Coast unsurveyed — the Delft passage</span></div>
+      <div class="row"><i style="border:0;border-top:1.4px dashed #8b3a2a;height:0"></i><span>Trade routes: a tongue to the work that proves it</span></div>
+    </dl>
+    <p class="note">Bulgarian (native) · English (C1) · German (B1) — Java, C#&nbsp;&amp;&nbsp;Unity, Python; C++&nbsp;&amp;&nbsp;Vulkan in the learning.</p>
+  </div>
+
+  <p class="caption">TILE <b>A</b> · BLAEU MAIOR · hand-coloured wash, ornate cartouche, full rhumb</p>
+</div>
+</body>
+</html>

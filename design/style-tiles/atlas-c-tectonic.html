@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Atlas tile C · Tectonic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IM+Fell+Great+Primer:ital@0;1&family=Roboto+Condensed:wght@400;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper: #e9e7e0;
+    --ink: #23252a;
+    --ink-soft: #5c6068;
+    --sea: #dbe2e4;
+    --u-edu: #c2673a;
+    --u-exp: #2f7d78;
+    --u-jam: #7a4a80;
+    --u-uni: #8b9440;
+    --u-prof: #c9a227;
+    --u-terra: #b03a4a;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    background: #16181b; color: var(--ink);
+    font-family: 'Roboto Condensed', system-ui, sans-serif;
+    display: grid; place-items: center; padding: 1.5rem;
+  }
+  .sheet {
+    position: relative; width: min(1600px, 100%); aspect-ratio: 16 / 10;
+    background: var(--paper);
+    box-shadow: 0 30px 90px rgba(0,0,0,.6); overflow: hidden;
+  }
+  .sheet svg.map { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .grain { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: multiply; opacity: .3; }
+  .neatline {
+    position: absolute; inset: 1.9%;
+    border: 2.5px solid var(--ink); pointer-events: none;
+  }
+  .neatline::after {
+    content: ''; position: absolute; inset: 5px; border: .8px solid var(--ink);
+  }
+  /* --- title block: a scientific plate header --- */
+  .titleblock {
+    position: absolute; left: 4.6%; top: 6.6%; width: 31%;
+    background: rgba(233,231,224,.95);
+    border: 2.5px solid var(--ink); padding: 1.15rem 1.25rem 1rem;
+  }
+  .tb-kicker {
+    font-size: .68rem; font-weight: 700; letter-spacing: .26em;
+    color: var(--ink-soft); border-bottom: 1px solid var(--ink);
+    padding-bottom: .45rem; margin-bottom: .7rem;
+  }
+  .tb-title {
+    font-family: 'IM Fell Great Primer', Georgia, serif; font-weight: 400;
+    font-size: clamp(1.6rem, 2.7vw, 2.5rem); line-height: 1.02; letter-spacing: -.005em;
+  }
+  .tb-sub {
+    margin-top: .5rem; font-size: .92rem; line-height: 1.4; color: var(--ink-soft);
+  }
+  .tb-specs {
+    margin-top: .9rem; padding-top: .7rem; border-top: 1px solid var(--ink);
+    display: grid; grid-template-columns: auto 1fr; gap: .28rem .9rem;
+    font-size: .76rem; line-height: 1.3;
+  }
+  .tb-specs dt { font-weight: 700; letter-spacing: .1em; color: var(--ink-soft); }
+  .tb-specs dd { margin: 0; }
+  /* --- legend: dense, coded --- */
+  .legend {
+    position: absolute; right: 4.4%; bottom: 7.4%; width: 27%;
+    background: rgba(233,231,224,.95);
+    border: 2.5px solid var(--ink); padding: .95rem 1.05rem 1rem;
+  }
+  .legend h3 {
+    font-size: .7rem; font-weight: 700; letter-spacing: .26em;
+    border-bottom: 1px solid var(--ink); padding-bottom: .4rem; margin-bottom: .6rem;
+  }
+  .legend .row {
+    display: grid; grid-template-columns: 2.2rem 1.9rem 1fr;
+    gap: .55rem; align-items: center; margin-bottom: .34rem;
+  }
+  .legend .row i { display: block; height: 14px; border: 1px solid var(--ink); }
+  .legend .row code {
+    font-family: 'Roboto Condensed', monospace; font-weight: 700;
+    font-size: .74rem; letter-spacing: .04em;
+  }
+  .legend .row span { font-size: .8rem; line-height: 1.25; }
+  .legend .sub {
+    margin-top: .6rem; padding-top: .5rem; border-top: 1px solid rgba(35,37,42,.35);
+    font-size: .74rem; line-height: 1.42; color: var(--ink-soft);
+  }
+  .scalebar {
+    position: absolute; left: 4.6%; bottom: 8.6%;
+    font-size: .7rem; letter-spacing: .12em; color: var(--ink-soft);
+  }
+  .scalebar .bar { display: flex; margin-bottom: .3rem; border: 1px solid var(--ink); width: 190px; }
+  .scalebar .bar i { height: 9px; flex: 1; }
+  .caption {
+    position: absolute; left: 4.6%; bottom: 4.4%;
+    font-size: .72rem; font-weight: 700; letter-spacing: .24em; color: var(--ink-soft);
+  }
+  .caption b { color: var(--u-edu); }
+  .lbl { font-family: 'Roboto Condensed', sans-serif; fill: var(--ink); }
+  .lbl-region { font-size: 20px; font-weight: 700; letter-spacing: .3em; fill: #ffffff;
+                paint-order: stroke; stroke: rgba(35,37,42,.55); stroke-width: 3px; }
+  .lbl-city  { font-size: 13px; font-weight: 700; letter-spacing: .1em; }
+  .lbl-sea   { font-size: 17px; letter-spacing: .34em; fill: #7d8f96; }
+  .lbl-code  { font-size: 15px; font-weight: 700; fill: rgba(35,37,42,.62); letter-spacing: .04em; }
+  .lbl-tiny  { font-size: 11.5px; fill: var(--ink); letter-spacing: .04em; }
+  .lbl-tick  { font-size: 10px; fill: var(--ink-soft); letter-spacing: .08em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <svg class="map" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs>
+      <pattern id="gratic" width="80" height="80" patternUnits="userSpaceOnUse">
+        <path d="M 80 0 L 0 0 0 80" fill="none" stroke="#23252a" stroke-width=".45" opacity=".2"/>
+      </pattern>
+      <pattern id="ovpJam" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <line x1="0" y1="0" x2="0" y2="7" stroke="#23252a" stroke-width=".7" opacity=".3"/>
+      </pattern>
+      <pattern id="ovpUni" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+        <line x1="0" y1="0" x2="0" y2="7" stroke="#23252a" stroke-width=".7" opacity=".3"/>
+      </pattern>
+
+      <path id="coast" d="M 120 265 C 190 210, 285 198, 355 236 C 410 266, 432 318, 498 322
+        C 556 326, 592 280, 652 292 C 712 304, 742 360, 716 416 C 694 464, 632 478, 606 530
+        C 580 582, 616 628, 590 680 C 564 732, 482 736, 436 778 C 390 820, 396 876, 338 892
+        C 276 909, 208 876, 162 824 C 116 772, 100 690, 110 606 C 120 522, 88 440, 104 356
+        C 112 314, 98 290, 120 265 Z" />
+      <path id="isle1" d="M 1200 208 C 1236 190, 1284 200, 1300 230 C 1316 260, 1294 288, 1258 291
+        C 1222 294, 1188 272, 1186 243 C 1185 226, 1188 214, 1200 208 Z" />
+      <path id="isle2" d="M 1345 330 C 1381 314, 1423 328, 1430 356 C 1437 384, 1412 408, 1378 405
+        C 1344 402, 1326 377, 1332 353 C 1335 342, 1339 333, 1345 330 Z" />
+      <path id="isle3" d="M 1180 448 C 1228 424, 1292 438, 1313 474 C 1334 511, 1310 553, 1260 562
+        C 1210 571, 1164 543, 1159 503 C 1156 478, 1165 456, 1180 448 Z" />
+      <path id="isle4" d="M 1412 540 C 1444 527, 1479 540, 1484 565 C 1489 590, 1466 611, 1437 607
+        C 1408 603, 1395 582, 1400 561 C 1403 551, 1406 543, 1412 540 Z" />
+      <path id="isle5" d="M 1420 178 C 1446 164, 1480 176, 1485 197 C 1490 218, 1470 236, 1443 233
+        C 1416 230, 1404 210, 1409 192 C 1411 185, 1415 180, 1420 178 Z" />
+      <path id="terra" d="M 632 172 C 720 118, 852 106, 952 130 C 1024 148, 1072 132, 1104 108" />
+      <clipPath id="clipNorth"><rect x="0" y="0" width="1600" height="565"/></clipPath>
+      <clipPath id="clipSouth"><rect x="0" y="565" width="1600" height="435"/></clipPath>
+    </defs>
+
+    <rect width="1600" height="1000" fill="var(--sea)"/>
+    <rect width="1600" height="1000" fill="url(#gratic)"/>
+
+    <!-- graticule ticks along the neatline -->
+    <g class="lbl lbl-tick">
+      <text x="240" y="46">10°E</text><text x="560" y="46">15°E</text>
+      <text x="880" y="46">20°E</text><text x="1200" y="46">25°E</text>
+      <text x="36" y="284" transform="rotate(-90 36 284)">52°N</text>
+      <text x="36" y="604" transform="rotate(-90 36 604)">48°N</text>
+      <text x="36" y="884" transform="rotate(-90 36 884)">44°N</text>
+    </g>
+
+    <!-- mainland: two mapped units, hard keyline, flat fill -->
+    <g transform="translate(510,182) scale(0.8)">
+      <g clip-path="url(#clipNorth)">
+        <use href="#coast" fill="var(--u-edu)" opacity=".82"/>
+      </g>
+      <g clip-path="url(#clipSouth)">
+        <use href="#coast" fill="var(--u-exp)" opacity=".82"/>
+      </g>
+      <use href="#coast" fill="none" stroke="#23252a" stroke-width="3"/>
+      <!-- unit contact -->
+      <path d="M 128 520 C 240 496, 360 540, 470 512 C 540 494, 578 520, 604 540"
+            fill="none" stroke="#23252a" stroke-width="2.4"/>
+      <!-- thrust teeth along the contact -->
+      <g fill="#23252a">
+        <path d="M 190 508 l 9 -14 l 9 14 Z"/><path d="M 300 516 l 9 -14 l 9 14 Z"/>
+        <path d="M 410 524 l 9 -14 l 9 14 Z"/><path d="M 520 506 l 9 -14 l 9 14 Z"/>
+      </g>
+    </g>
+
+    <!-- island units -->
+    <g stroke="#23252a" stroke-width="2.4">
+      <use href="#isle1" fill="var(--u-jam)" opacity=".82"/><use href="#isle1" fill="url(#ovpJam)" stroke="none"/>
+      <use href="#isle2" fill="var(--u-jam)" opacity=".82"/><use href="#isle2" fill="url(#ovpJam)" stroke="none"/>
+      <use href="#isle3" fill="var(--u-uni)" opacity=".82"/><use href="#isle3" fill="url(#ovpUni)" stroke="none"/>
+      <use href="#isle4" fill="var(--u-uni)" opacity=".82"/><use href="#isle4" fill="url(#ovpUni)" stroke="none"/>
+      <use href="#isle5" fill="var(--u-uni)" opacity=".82"/><use href="#isle5" fill="url(#ovpUni)" stroke="none"/>
+    </g>
+    <g fill="none" stroke="#23252a" stroke-width="2.4">
+      <use href="#isle1"/><use href="#isle2"/><use href="#isle3"/><use href="#isle4"/><use href="#isle5"/>
+    </g>
+
+    <!-- inferred margin -->
+    <use href="#terra" fill="none" stroke="var(--u-terra)" stroke-width="3" stroke-dasharray="16 9"/>
+
+    <!-- correlation lines -->
+    <g fill="none" stroke="#23252a" stroke-width="1.1" stroke-dasharray="3 5" opacity=".7">
+      <path d="M 1080 600 C 1120 560, 1160 520, 1180 500"/>
+      <path d="M 1075 570 C 1160 500, 1290 400, 1340 365"/>
+      <path d="M 1060 520 C 1110 430, 1170 300, 1210 255"/>
+      <path d="M 1090 650 C 1200 650, 1350 600, 1410 578"/>
+      <path d="M 1050 500 C 1170 390, 1340 250, 1415 205"/>
+    </g>
+
+    <!-- north arrow: purely functional -->
+    <g transform="translate(1000,240)">
+      <line x1="0" y1="34" x2="0" y2="-30" stroke="#23252a" stroke-width="1.6"/>
+      <path d="M 0 -40 L 6.5 -24 L 0 -28 L -6.5 -24 Z" fill="#23252a"/>
+      <text class="lbl lbl-tiny" x="0" y="48" text-anchor="middle" style="font-weight:700">N</text>
+    </g>
+
+    <text class="lbl lbl-sea" x="320" y="606" text-anchor="middle">UNMAPPED</text>
+    <text class="lbl lbl-region" x="774" y="464" text-anchor="middle">EDUCATION</text>
+    <text class="lbl lbl-region" x="795" y="726" text-anchor="middle">EXPERIENCE</text>
+    <g class="lbl lbl-code">
+      <text x="774" y="492" text-anchor="middle">Ed₁₋₂</text>
+      <text x="795" y="754" text-anchor="middle">Ex₁₋₂</text>
+    </g>
+    <text class="lbl lbl-tiny" x="800" y="210" text-anchor="middle"
+          style="font-weight:700;letter-spacing:.2em;fill:var(--u-terra)">INFERRED MARGIN — DELFT</text>
+    <text class="lbl lbl-tiny" x="800" y="230" text-anchor="middle" style="fill:var(--ink-soft)">position approximate; not surveyed</text>
+
+    <g class="lbl lbl-city">
+      <rect x="820" y="418" width="7" height="7" fill="#23252a"/><text x="834" y="427">EINDHOVEN</text>
+      <rect x="746" y="759" width="7" height="7" fill="#23252a"/><text x="760" y="768">SOFIA</text>
+      <rect x="689" y="691" width="5" height="5" fill="#23252a"/><text x="700" y="699" style="font-size:11.5px">INDEAVR</text>
+      <rect x="959" y="567" width="7" height="7" fill="#23252a"/><text x="973" y="576">TOTEM</text>
+    </g>
+    <g class="lbl lbl-tiny">
+      <text x="1243" y="314" text-anchor="middle">Don’t Break Glass</text>
+      <text x="1447" y="258" text-anchor="middle">Olympian Onslaught</text>
+      <text x="1381" y="428" text-anchor="middle">Kill Bunny</text>
+      <text x="1245" y="590" text-anchor="middle">Digital Twinning</text>
+      <text x="1442" y="632" text-anchor="middle">Blood of Hedon</text>
+    </g>
+  </svg>
+
+  <svg class="grain" aria-hidden="true">
+    <filter id="grainF"><feTurbulence type="fractalNoise" baseFrequency=".75" numOctaves="4" seed="21"/><feColorMatrix type="saturate" values="0"/></filter>
+    <rect width="100%" height="100%" filter="url(#grainF)" opacity=".18"/>
+  </svg>
+
+  <div class="neatline"></div>
+
+  <div class="titleblock">
+    <p class="tb-kicker">SHEET 1 OF 4 · CAREER SERIES</p>
+    <h1 class="tb-title">Damyan Hristov</h1>
+    <p class="tb-sub">Structural map of study, labour and shipped work. Games, engines and experimental graphics; Computer Science and Engineering, TU/e, class of 2027.</p>
+    <dl class="tb-specs">
+      <dt>SCALE</dt><dd>1 : 1 career, approx.</dd>
+      <dt>COMPILED</dt><dd>Eindhoven, 2026</dd>
+      <dt>UNITS</dt><dd>6 mapped, 1 inferred</dd>
+      <dt>SOURCE</dt><dd>primary survey</dd>
+    </dl>
+  </div>
+
+  <div class="legend">
+    <h3>EXPLANATION OF UNITS</h3>
+    <div class="row"><i style="background:var(--u-edu)"></i><code>Ed₁₋₂</code><span>Education — Eindhoven, Sofia</span></div>
+    <div class="row"><i style="background:var(--u-exp)"></i><code>Ex₁₋₂</code><span>Experience — Totem, INDEAVR</span></div>
+    <div class="row"><i style="background:var(--u-jam)"></i><code>Pj</code><span>Shipped work, jam origin</span></div>
+    <div class="row"><i style="background:var(--u-uni)"></i><code>Pu</code><span>Shipped work, university origin</span></div>
+    <div class="row"><i style="background:transparent;border-color:var(--u-terra);border-style:dashed;border-width:2px"></i><code>∆</code><span>Inferred margin — MSc Delft, computer graphics</span></div>
+    <div class="row"><i style="border:0;border-top:1.4px dashed #23252a;height:0"></i><code>——</code><span>Correlation: language to the work proving it</span></div>
+    <p class="sub"><b>SPOKEN</b> Bulgarian (native) · English (C1) · German (B1)<br/>
+       <b>MAPPED</b> Java · C# &amp; Unity · Python <b>· ACTIVE</b> C++ &amp; Vulkan</p>
+  </div>
+
+  <div class="scalebar">
+    <div class="bar">
+      <i style="background:#23252a"></i><i style="background:transparent"></i>
+      <i style="background:#23252a"></i><i style="background:transparent"></i>
+    </div>
+    2019 · 2021 · 2023 · 2025 · 2027
+  </div>
+
+  <p class="caption">TILE <b>C</b> · TECTONIC · archival scientific, coded units, density as ornament</p>
+</div>
+</body>
+</html>
