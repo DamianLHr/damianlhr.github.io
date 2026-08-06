@@ -18,8 +18,6 @@
   background: var(--ws-sky);
   color: var(--ws-ink);
   font-family: 'Space Grotesk', system-ui, sans-serif;
-  /* marker positions are expressed in container units */
-  container-type: size;
 }
 
 .ws-canvas {
@@ -107,9 +105,11 @@
 .ws-place-project {
   cursor: pointer;
   font-weight: 500;
+  /* never transition `transform`: JS rewrites it every frame to track the
+     terrain, so an easing curve leaves the marker forever chasing the origin */
   transition:
-    transform 180ms var(--ws-ease),
-    background 180ms var(--ws-ease);
+    background 180ms var(--ws-ease),
+    border-color 180ms var(--ws-ease);
 }
 
 .ws-place-project i {
@@ -132,8 +132,8 @@
 
 @media (hover: hover) and (pointer: fine) {
   .ws-place-project:hover {
-    transform: translate(-50%, -100%) scale(1.06);
     background: var(--ws-paper);
+    border-color: var(--ws-accent-warm);
   }
 }
 

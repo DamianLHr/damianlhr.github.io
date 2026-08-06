@@ -32,9 +32,16 @@ export interface Scene {
   project: (p: THREE.Vector3, out: { x: number; y: number; visible: boolean }) => void
   worldPointAt: (gx: number, gy: number, h: number) => THREE.Vector3
   flyTo: (target: THREE.Vector3, distance: number, instant?: boolean) => void
-  onFrame: (cb: () => void) => void
+  /** register a per-frame callback; returns an unsubscribe */
+  onFrame: (cb: () => void) => () => void
   stats: () => { fps: number; tris: number; detail: number }
   setAutoRotate: (on: boolean) => void
+  /**
+   * Push the rendered subject away from an overlay, as a fraction of the
+   * viewport. The interface is a fixed panel over a fixed canvas, so without
+   * this the island simply sits underneath it.
+   */
+  setFraming: (dx: number, dy: number) => void
 }
 
 /** grid coords → world space */
@@ -196,12 +203,15 @@ export function createScene(
   controls.autoRotateSpeed = 0.35
   controls.update()
 
+  const framing = { dx: 0, dy: 0 }
   const resize = () => {
     const w = canvas.clientWidth
     const h = canvas.clientHeight
     if (!w || !h) return
     renderer.setSize(w, h, false)
     camera.aspect = w / h
+    // a negative x offset slides the rendered content to the right
+    camera.setViewOffset(w, h, -framing.dx * w, -framing.dy * h, w, h)
     camera.updateProjectionMatrix()
   }
   resize()
@@ -297,11 +307,19 @@ export function createScene(
       renderer.dispose()
     },
     resize,
+    /**
+     * World point → CSS pixels within the canvas. Deliberately pixels rather
+     * than container-query units: those need the container to have a definite
+     * size, and a `min-height` root silently resolves `cqh` to zero, which
+     * collapses every marker onto one line.
+     */
     project(p, out) {
       projV.copy(p).project(camera)
-      out.x = (projV.x * 0.5 + 0.5) * 100
-      out.y = (-projV.y * 0.5 + 0.5) * 100
-      out.visible = projV.z < 1 && out.x > -8 && out.x < 108 && out.y > -8 && out.y < 108
+      const w = canvas.clientWidth
+      const h = canvas.clientHeight
+      out.x = (projV.x * 0.5 + 0.5) * w
+      out.y = (-projV.y * 0.5 + 0.5) * h
+      out.visible = projV.z < 1 && out.x > -60 && out.x < w + 60 && out.y > -40 && out.y < h + 40
     },
     worldPointAt: (gx, gy, h) => toWorld(gx, gy, h, size),
     flyTo(target, distance, instant = false) {
@@ -321,10 +339,19 @@ export function createScene(
     },
     onFrame(cb) {
       frameCbs.push(cb)
+      return () => {
+        const i = frameCbs.indexOf(cb)
+        if (i >= 0) frameCbs.splice(i, 1)
+      }
     },
     stats: () => ({ fps: Math.round(fps), tris: quads * 2, detail }),
     setAutoRotate(on) {
       controls.autoRotate = on && !opts.reducedMotion
+    },
+    setFraming(dx, dy) {
+      framing.dx = dx
+      framing.dy = dy
+      resize()
     },
   }
 }

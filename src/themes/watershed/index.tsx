@@ -144,14 +144,23 @@ export function Root({ content, route, navigate }: ThemeProps) {
         (r) => [`reg:${r.label}`, s.worldPointAt(r.gx, r.gy, r.h)] as [string, THREE.Vector3],
       ),
     ])
-    s.onFrame(() => {
+    return s.onFrame(() => {
+      // panels are opaque glass; a marker underneath one is just noise
+      const panel = document.querySelector('.ws-panel, .ws-hero')?.getBoundingClientRect()
       for (const [id, el] of markerRefs.current) {
         const pt = points.get(id)
         if (!pt) continue
         s.project(pt, out)
-        el.style.transform = `translate(-50%,-100%) translate(${out.x}cqw, ${out.y}cqh)`
-        el.style.opacity = out.visible ? '1' : '0'
-        el.style.pointerEvents = out.visible ? 'auto' : 'none'
+        const hidden =
+          !!panel &&
+          out.x > panel.left - 8 &&
+          out.x < panel.right + 8 &&
+          out.y > panel.top - 8 &&
+          out.y < panel.bottom + 8
+        const show = out.visible && !hidden
+        el.style.transform = `translate(${out.x}px, ${out.y}px) translate(-50%,-120%)`
+        el.style.opacity = show ? '1' : '0'
+        el.style.pointerEvents = show ? 'auto' : 'none'
       }
     })
   }, [ready, layout])
@@ -163,6 +172,12 @@ export function Root({ content, route, navigate }: ThemeProps) {
     if (!s || !layout) return
     const target = layout.focus(route)
     s.setAutoRotate(route.kind === 'home')
+    // home puts its card bottom-left, inner routes a panel on the right; shift
+    // the island out from under whichever is showing (skip on narrow screens,
+    // where panels are bottom sheets and the map keeps the upper band)
+    const narrow = window.matchMedia('(max-width: 900px)').matches
+    const isHome = route.kind === 'home'
+    s.setFraming(narrow ? 0 : isHome ? 0.12 : -0.15, narrow ? -0.16 : 0)
     s.flyTo(target.point, target.distance, !mounted.current)
     mounted.current = true
   }, [route, ready, layout])
@@ -287,10 +302,32 @@ function layoutContent(world: World, content: SiteContent): Layout {
     h: s.h,
     basin: s.basin,
   }))
-  // strongest sites first, but spread so labels do not stack in one valley
-  const pool = [...sites]
+
+  // The bake returns sites best-score-first, so taking them in order drops all
+  // the content into the same handful of good valleys and the labels pile up.
+  // Farthest-point sampling instead: keep the best site, then repeatedly take
+  // whichever remaining site is furthest from everything already placed.
+  const remaining = [...sites]
+  const ordered: typeof sites = []
+  if (remaining.length) ordered.push(remaining.shift()!)
+  while (remaining.length) {
+    let bestIdx = 0
+    let bestDist = -1
+    remaining.forEach((cand, i) => {
+      let nearest = Infinity
+      for (const p of ordered) {
+        const d = Math.hypot(cand.gx - p.gx, cand.gy - p.gy)
+        if (d < nearest) nearest = d
+      }
+      if (nearest > bestDist) {
+        bestDist = nearest
+        bestIdx = i
+      }
+    })
+    ordered.push(remaining.splice(bestIdx, 1)[0])
+  }
   let cursor = 0
-  const next = () => pool[Math.min(pool.length - 1, cursor++)]
+  const next = () => ordered[Math.min(ordered.length - 1, cursor++)]
 
   const places: Place[] = []
   for (const e of content.cv.education) {
