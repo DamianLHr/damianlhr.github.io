@@ -161,9 +161,31 @@ export function createWorld({
         : (h / Math.max(1e-6, shoreValue)) * seaLevel
   }
 
+  // A thin mantle of loose material over bedrock (SoilMachine's layered soil,
+  // reduced to the two layers that actually change the silhouette). Water strips
+  // this first and only then bites into rock, at a fraction of the rate — which
+  // is what lets a hard shoulder stand as a cliff while the slope below it wears
+  // back. Where the mantle survives it avalanches at a much lower angle than
+  // rock, so cliffs get scree aprons instead of a uniform slope.
+  const soft = new Float32Array(size * size)
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const nx = (x / size) * scale
+      const ny = (y / size) * scale
+      const i = y * size + x
+      // never more loose material than there is ground to stand on — the deep
+      // sea floor sits below the mantle's own thickness
+      soft[i] = Math.min(
+        Math.max(0, height[i]),
+        0.008 + 0.026 * fbm(nx * 1.7 + 91.4, ny * 1.7 - 63.2, seed + 777, 4),
+      )
+    }
+  }
+
   return {
     size,
     height,
+    soft,
     discharge: new Float32Array(size * size),
     momentumX: new Float32Array(size * size),
     momentumY: new Float32Array(size * size),
@@ -204,28 +226,44 @@ export const DEFAULTS = {
   density: 1.0,
   evapRate: 0.001,
   depositionRate: 0.12,
-  entrainment: 6.0,
+  entrainment: 4.0,
+  /** Normalises unbounded discharge into 0..1 for the capacity term. */
+  entrainScale: 0.4,
   /** hard ceiling on suspended load — the guard against runaway entrainment */
   maxConcentration: 0.03,
   maxSteps: 1200,
-  // stream coupling — this is what concentrates flow into channels
-  momentumTransfer: 2.0,
-  /** How fast rising discharge damps a channel's ability to cut. Set too eager
-   *  and a river stops incising the moment it becomes a river, leaving shallow
-   *  blue lines drawn on a smooth hillside instead of valleys. */
+  /** Stream coupling — measured to be the single strongest control on whether
+   *  flow gathers into rivers at all. Raising it from 2 to 8 took the share of
+   *  water carried by the busiest 1% of cells from 0.11 to 0.27. */
+  momentumTransfer: 8.0,
+  /** Normalises discharge for the evaporation damper: water is slower to leave
+   *  ground that is already wet. */
   dischargeScale: 0.12,
-  /** floor on that damping, so big rivers keep carving rather than only paving */
-  minCutting: 0.35,
   // maps
   averaging: 0.02,
   // land
   seaLevel: 0.32,
   /** Angle of repose, as height per cell. Too tight and avalanching planes the
-   *  whole island into a smooth dome — this is what cliffs live or die by. */
-  repose: 0.042,
+   *  whole island into a smooth dome — this is what cliffs live or die by.
+   *  Bedrock holds a much steeper face than loose material; the gap between the
+   *  two is what makes a cliff read as a cliff with scree gathered under it. */
+  reposeRock: 0.075,
+  reposeSoft: 0.021,
+  /** Below this thickness a cell counts as bare rock for avalanching. */
+  softCover: 0.004,
+  /** How much of the effort spent cutting rock actually removes rock. Loose
+   *  material goes first and freely; bedrock resists, so channels incise
+   *  through the mantle quickly and then slow against the rock beneath. */
+  rockResistance: 0.28,
   thermalRate: 0.35,
   /** run avalanching every N timesteps rather than every one */
   thermalEvery: 5,
+  // wind (see `wind()`) — a light pass, run after the water has done its work
+  windDir: [0.82, -0.57],
+  windSuspension: 0.0009,
+  windAbrasion: 0.0006,
+  windSettle: 0.06,
+  windSteps: 160,
 }
 
 /**
@@ -253,10 +291,13 @@ function descend(w, px, py, P) {
 
     const n = normalAt(w, ix, iy)
 
-    // effective parameters weaken where a river already runs — established
-    // channels transport rather than dig
+    // Water is slower to evaporate off ground that already carries a stream.
+    // Cutting used to be damped here too, on the theory that an established
+    // channel transports rather than digs — but now that capacity itself scales
+    // with discharge, that damper only cancelled the mechanism that makes
+    // rivers. Removing it is worth ~40% more channelisation on its own.
     const d = erf(P.dischargeScale * w.discharge[i])
-    const effD = P.depositionRate * Math.max(P.minCutting, 1 - d)
+    const effD = P.depositionRate
     const effR = P.evapRate * (1 - 0.5 * d)
 
     // gravity
@@ -293,17 +334,37 @@ function descend(w, px, py, P) {
     if (jx < 1 || jy < 1 || jx >= s - 1 || jy >= s - 1) break
     const j = jy * s + jx
 
-    // Equilibrium concentration from the drop the particle just took. Bounded
-    // on purpose: unbounded entrainment is a positive feedback loop — deposit
-    // raises the ground, the next drop is larger, which entrains more still —
-    // and it ends with spikes and a silted-up sea.
+    // Equilibrium concentration from the drop the particle just took, scaled by
+    // how much water already passes here. This is the meander mechanism: a cell
+    // the stream runs through can hold far more sediment than open hillside, so
+    // the fast outer bank of a bend keeps cutting while the slow inner bank
+    // drops its load, and the channel wanders instead of running straight down
+    // the fall line. Still bounded — unbounded entrainment is a positive
+    // feedback loop (deposit raises the ground, the next drop is larger, which
+    // entrains more still) and it ends in spikes and a silted-up sea.
     const drop = w.height[i] - w.height[j]
-    let cEq = drop > 0 ? drop * P.entrainment : 0
+    const dCap = erf(P.entrainScale * w.discharge[i])
+    let cEq = drop > 0 ? drop * (1 + P.entrainment * dCap) : 0
     if (cEq > P.maxConcentration) cEq = P.maxConcentration
     const cDiff = cEq - sediment
 
-    sediment += effD * cDiff
-    w.height[i] -= effD * cDiff
+    // Take the loose mantle first and only then bite into rock, which yields a
+    // fraction of the same effort. Channels cut quickly down to bedrock and
+    // then slow against it, so the hard ground stands out as ribs and cliffs
+    // rather than everything wearing down together.
+    const change = effD * cDiff
+    if (change > 0) {
+      const fromSoft = Math.min(w.soft[i], change)
+      const removed = fromSoft + (change - fromSoft) * P.rockResistance
+      w.soft[i] -= fromSoft
+      w.height[i] -= removed
+      sediment += removed
+    } else {
+      const add = -change
+      w.height[i] += add
+      w.soft[i] += add
+      sediment -= add
+    }
 
     // evaporate
     sediment /= 1 - effR
@@ -321,25 +382,39 @@ function descend(w, px, py, P) {
   const fy = clampi(Math.floor(y), 1, s - 2)
   const fi = fy * s + fx
   if (sediment > 0 && w.height[fi] >= P.seaLevel) {
-    w.height[fi] += Math.min(sediment, P.maxConcentration)
+    const laid = Math.min(sediment, P.maxConcentration)
+    w.height[fi] += laid
+    w.soft[fi] += laid
   }
 
   return steps
 }
 
-/** Avalanching: material above the angle of repose slides to lower neighbours. */
+/**
+ * Avalanching: material above the angle of repose slides to lower neighbours.
+ *
+ * The repose angle is per material (SoilMachine's `maxdiff`). Loose ground
+ * gives way at a shallow angle, bare rock holds a much steeper one — so a rock
+ * shoulder stays a cliff while everything shed off it gathers below as scree.
+ * A single repose for both is what previously smoothed the island into a dome.
+ * Whatever slides arrives loose, whether it left as rock or as sediment.
+ */
 function thermal(w, P, iterations = 1) {
   const s = w.size
   const h = w.height
+  const soft = w.soft
   const delta = new Float32Array(s * s)
+  const softDelta = new Float32Array(s * s)
   for (let it = 0; it < iterations; it++) {
     delta.fill(0)
+    softDelta.fill(0)
     for (let y = 1; y < s - 1; y++) {
       for (let x = 1; x < s - 1; x++) {
         const i = y * s + x
         if (h[i] < P.seaLevel) continue
+        const repose = soft[i] > P.softCover ? P.reposeSoft : P.reposeRock
         let lowest = -1
-        let maxDiff = P.repose
+        let maxDiff = repose
         for (let dy = -1; dy <= 1; dy++) {
           for (let dx = -1; dx <= 1; dx++) {
             if (!dx && !dy) continue
@@ -352,13 +427,18 @@ function thermal(w, P, iterations = 1) {
           }
         }
         if (lowest >= 0) {
-          const move = (maxDiff - P.repose) * P.thermalRate
+          const move = (maxDiff - repose) * P.thermalRate
           delta[i] -= move
           delta[lowest] += move
+          softDelta[i] -= Math.min(soft[i], move)
+          softDelta[lowest] += move
         }
       }
     }
-    for (let i = 0; i < s * s; i++) h[i] += delta[i]
+    for (let i = 0; i < s * s; i++) {
+      h[i] += delta[i]
+      soft[i] = Math.max(0, soft[i] + softDelta[i])
+    }
   }
 }
 
@@ -397,6 +477,246 @@ export function erode(w, { steps = 2000, dropsPerStep = 220, seed = 7, params = 
     if (onStep && t % 100 === 0) onStep(t, steps, totalSteps)
   }
   return { totalSteps }
+}
+
+/**
+ * A light pass of particle-based wind erosion, after the water has done its work
+ * (nickmcd.me/2020/11/23/particle-based-wind-erosion).
+ *
+ * Grains are lifted off ground that stands into the prevailing wind and dropped
+ * again in its lee, so exposed shoulders lose their loose cover down to rock
+ * while hollows and leeward slopes gather it. Abrasion does not remove rock, it
+ * *loosens* it — bare stone in the wind weathers into material the next particle
+ * can carry — which is what puts sand at the feet of the exposed faces instead
+ * of simply sanding the island down.
+ */
+export function wind(w, { particles = 9000, seed = 21, params = {} } = {}) {
+  const P = { ...DEFAULTS, ...params }
+  const s = w.size
+  const rng = mulberry32(seed)
+  const wl = Math.hypot(P.windDir[0], P.windDir[1]) || 1
+  const wx = P.windDir[0] / wl
+  const wy = P.windDir[1] / wl
+  let moved = 0
+
+  for (let p = 0; p < particles; p++) {
+    // Seed on land. Launching from the upwind edge of the map is the tidier
+    // picture but the frame is open water by construction, so every particle
+    // died on its first step out at sea and the pass did nothing at all.
+    const x0 = 1 + rng() * (s - 3)
+    const y0 = 1 + rng() * (s - 3)
+    if (w.height[Math.floor(y0) * s + Math.floor(x0)] < P.seaLevel) continue
+    let x = x0
+    let y = y0
+    let vx = wx
+    let vy = wy
+    let carrying = 0
+
+    for (let step = 0; step < P.windSteps; step++) {
+      const ix = Math.floor(x)
+      const iy = Math.floor(y)
+      if (ix < 1 || iy < 1 || ix >= s - 1 || iy >= s - 1) break
+      const i = iy * s + ix
+      // grains blown out over water are gone
+      if (w.height[i] < P.seaLevel) break
+
+      const n = normalAt(w, ix, iy)
+      // the wind keeps pushing, the slope deflects — this is what steers
+      // particles around obstacles rather than through them
+      vx = vx * 0.86 + wx * 0.3 + n.x * 2.2
+      vy = vy * 0.86 + wy * 0.3 + n.y * 2.2
+      const sp = Math.hypot(vx, vy)
+      if (sp < 1e-9) break
+      vx /= sp
+      vy /= sp
+
+      // ground rising into the wind is exposed; ground falling away is sheltered
+      const facing = -(n.x * wx + n.y * wy) * 40
+      const hit = Math.max(0, Math.min(1, facing))
+      const shelter = Math.max(0, Math.min(1, -facing))
+
+      if (w.soft[i] > P.softCover) {
+        const lift = Math.min(w.soft[i] - P.softCover, P.windSuspension * (0.25 + hit))
+        w.soft[i] -= lift
+        w.height[i] -= lift
+        carrying += lift
+        moved += lift
+      } else {
+        // bare rock: weather it into loose grains in place, no height change
+        w.soft[i] = Math.min(w.height[i], w.soft[i] + P.windAbrasion * hit)
+      }
+
+      const settle = carrying * P.windSettle * (1 + shelter * 6)
+      if (settle > 0) {
+        carrying -= settle
+        w.height[i] += settle
+        w.soft[i] += settle
+      }
+
+      x += vx
+      y += vy
+    }
+
+    // whatever is still airborne lands where the particle gave out
+    const fx = clampi(Math.floor(x), 1, s - 2)
+    const fy = clampi(Math.floor(y), 1, s - 2)
+    const fi = fy * s + fx
+    if (carrying > 0 && w.height[fi] >= P.seaLevel) {
+      w.height[fi] += carrying
+      w.soft[fi] += carrying
+    }
+  }
+  return { moved }
+}
+
+/**
+ * Standing water on the land: the depth between the terrain and the level its
+ * depression fills to before spilling. This is the cheap, deterministic cousin
+ * of the flood step in nickmcd.me/2020/04/15/procedural-hydrology — we already
+ * compute the filled surface for routing, and the difference between the two
+ * *is* the lake. `minDepth` discards the epsilon the fill leaves on flats.
+ */
+export function lakes(w, seaLevel, minDepth = 0.002, surface) {
+  const n = w.size * w.size
+  const filled = surface ?? fillDepressions(w, seaLevel)
+  const depth = new Float32Array(n)
+  let cells = 0
+  for (let i = 0; i < n; i++) {
+    if (w.height[i] < seaLevel) continue
+    const d = filled[i] - w.height[i]
+    if (d > minDepth) {
+      depth[i] = d
+      cells++
+    }
+  }
+  return { depth, cells }
+}
+
+/**
+ * Drop the offshore specks and anything clinging to the frame, keeping the
+ * island the site is actually about.
+ *
+ * Land is labelled into connected components; a component is sunk unless it is
+ * big enough to read as land and sits clear of the border. Sinking is smoothed
+ * afterwards so what is left is a shoal on the sea floor rather than a drowned
+ * plateau with a cliff around it.
+ */
+export function pruneIslands(
+  w,
+  seaLevel,
+  { minCells = 260, borderMargin = 0.14, keep = 3, nearMainland = 0.07 } = {},
+) {
+  const s = w.size
+  const n = s * s
+  const label = new Int32Array(n).fill(-1)
+  const comps = []
+  const stack = []
+  const margin = Math.round(s * borderMargin)
+
+  for (let start = 0; start < n; start++) {
+    if (w.height[start] < seaLevel || label[start] !== -1) continue
+    const id = comps.length
+    let size = 0
+    let touchesBorder = false
+    let sumX = 0
+    let sumY = 0
+    let minX = s
+    let maxX = -1
+    let minY = s
+    let maxY = -1
+    stack.length = 0
+    stack.push(start)
+    label[start] = id
+    while (stack.length) {
+      const i = stack.pop()
+      const x = i % s
+      const y = (i / s) | 0
+      size++
+      sumX += x
+      sumY += y
+      if (x < minX) minX = x
+      if (x > maxX) maxX = x
+      if (y < minY) minY = y
+      if (y > maxY) maxY = y
+      if (x < margin || y < margin || x >= s - margin || y >= s - margin) touchesBorder = true
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue
+          const nx = x + dx
+          const ny = y + dy
+          if (nx < 0 || ny < 0 || nx >= s || ny >= s) continue
+          const j = ny * s + nx
+          if (label[j] !== -1 || w.height[j] < seaLevel) continue
+          label[j] = id
+          stack.push(j)
+        }
+      }
+    }
+    comps.push({
+      id,
+      size,
+      touchesBorder,
+      cx: sumX / size,
+      cy: sumY / size,
+      minX,
+      maxX,
+      minY,
+      maxY,
+    })
+  }
+
+  const ranked = [...comps].sort((a, b) => b.size - a.size)
+  const main = ranked[0]
+  const reach = s * nearMainland
+  /** Gap between two components' bounding boxes, in cells. */
+  const gapTo = (c, m) =>
+    Math.hypot(
+      Math.max(0, Math.max(m.minX - c.maxX, c.minX - m.maxX)),
+      Math.max(0, Math.max(m.minY - c.maxY, c.minY - m.maxY)),
+    )
+  const kept = new Set()
+  for (const c of ranked) {
+    if (c === main) {
+      kept.add(c.id) // the mainland survives whatever it touches
+      continue
+    }
+    if (kept.size >= keep) break
+    // An islet earns its place by being substantial, clear of the frame, and
+    // close enough to read as this island's own skerry rather than a stray lump
+    // of noise stranded out at the edge of the map.
+    if (!c.touchesBorder && c.size >= minCells && gapTo(c, main) <= reach) kept.add(c.id)
+  }
+
+  let sunk = 0
+  for (let i = 0; i < n; i++) {
+    if (label[i] < 0 || kept.has(label[i])) continue
+    // Sink well past the shallows. Dropping them just under the waterline left
+    // pale shoals exactly where the islands had been — the ghost of the thing
+    // we removed, since the water colour only reaches full depth at 0.1 down.
+    w.height[i] = seaLevel - 0.12 - (w.height[i] - seaLevel) * 0.1
+    w.soft[i] = 0
+    sunk++
+  }
+
+  // feather the sunken ground into the sea floor around it
+  if (sunk > 0) {
+    const h = w.height
+    for (let pass = 0; pass < 6; pass++) {
+      const copy = Float32Array.from(h)
+      for (let y = 1; y < s - 1; y++) {
+        for (let x = 1; x < s - 1; x++) {
+          const i = y * s + x
+          if (copy[i] >= seaLevel) continue
+          let sum = 0
+          for (let dy = -1; dy <= 1; dy++)
+            for (let dx = -1; dx <= 1; dx++) sum += copy[(y + dy) * s + (x + dx)]
+          h[i] = Math.min(seaLevel - 0.004, sum / 9)
+        }
+      }
+    }
+  }
+
+  return { components: comps.length, kept: kept.size, sunk }
 }
 
 // --- derived fields -----------------------------------------------------------

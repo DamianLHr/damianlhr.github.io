@@ -10,6 +10,9 @@ export interface WorldMeta {
   seaLevel: number
   maxDischarge: number
   basins: number
+  /** the run's own maxima, so surface.png decodes back to what was baked */
+  softScale?: number
+  lakeScale?: number
   sites: { x: number; y: number; h: number; basin: number }[]
 }
 
@@ -22,6 +25,10 @@ export interface World {
   discharge: Float32Array
   /** drainage basin id, 0 for sea */
   basin: Uint8Array
+  /** thickness of loose cover; 0 is bare bedrock */
+  soft: Float32Array
+  /** depth of standing water on the land — the lakes the drainage filled */
+  lake: Float32Array
   meta: WorldMeta
 }
 
@@ -43,9 +50,10 @@ async function decode(url: string): Promise<{ w: number; h: number; data: Uint8C
 
 export async function loadWorld(base = import.meta.env.BASE_URL): Promise<World> {
   const root = `${base}watershed/`.replace(/\/+watershed\//, '/watershed/')
-  const [terrain, basinImg, meta] = await Promise.all([
+  const [terrain, basinImg, surfaceImg, meta] = await Promise.all([
     decode(`${root}terrain.png`),
     decode(`${root}basin.png`),
+    decode(`${root}surface.png`),
     fetch(`${root}world.json`).then((r) => r.json() as Promise<WorldMeta>),
   ])
 
@@ -53,14 +61,20 @@ export async function loadWorld(base = import.meta.env.BASE_URL): Promise<World>
   const height = new Float32Array(n)
   const discharge = new Float32Array(n)
   const basin = new Uint8Array(n)
+  const soft = new Float32Array(n)
+  const lake = new Float32Array(n)
+  const softScale = meta.softScale ?? 1
+  const lakeScale = meta.lakeScale ?? 1
   for (let i = 0; i < n; i++) {
     const o = i * 4
     // height is 16-bit across R,G — see scripts/watershed/png.mjs
     height[i] = ((terrain.data[o] << 8) | terrain.data[o + 1]) / 65535
     discharge[i] = terrain.data[o + 2] / 255
     basin[i] = basinImg.data[i * 4]
+    soft[i] = (surfaceImg.data[o] / 255) * softScale
+    lake[i] = (surfaceImg.data[o + 1] / 255) * lakeScale
   }
-  return { size: terrain.w, seaLevel: meta.seaLevel, height, discharge, basin, meta }
+  return { size: terrain.w, seaLevel: meta.seaLevel, height, discharge, basin, soft, lake, meta }
 }
 
 // --- shading ------------------------------------------------------------------
@@ -74,8 +88,11 @@ export interface Palette {
   dirt: [number, number, number]
   rock: [number, number, number]
   rockHi: [number, number, number]
+  /** loose stone gathered below a face — warmer and lighter than the cliff itself */
+  scree: [number, number, number]
   snow: [number, number, number]
   river: [number, number, number]
+  lake: [number, number, number]
 }
 
 /**
@@ -143,8 +160,10 @@ export const NATURAL: Palette = {
   dirt: [0.46, 0.36, 0.25],
   rock: [0.47, 0.45, 0.43],
   rockHi: [0.62, 0.6, 0.58],
+  scree: [0.55, 0.5, 0.44],
   snow: [0.93, 0.94, 0.95],
   river: [0.22, 0.4, 0.56],
+  lake: [0.12, 0.28, 0.42],
 }
 
 const mix3 = (a: number[], b: number[], t: number): [number, number, number] => [
@@ -294,8 +313,27 @@ export function bakeSurface(w: World, pal: Palette = NATURAL): Surface {
       c = mix3(c, pal.rockHi, cliff)
       const snow = clamp01((e - 0.84) / 0.16) * (1 - cliff * 0.85)
       c = mix3(c, pal.snow, snow)
+
+      // What the ground is *made of*, not just how high it sits. The bake tracks
+      // a loose layer over bedrock: where water and wind have stripped it the
+      // stone shows through, and where it has gathered it reads as scree.
+      //
+      // Both terms are gated on slope. Two thirds of the island sits below the
+      // cover threshold, so tinting on thickness alone greyed the whole thing
+      // into chalk — thin soil on the flat still grows grass, and it is only on
+      // ground steep enough to shed that bare rock actually shows.
+      const steep = clamp01(slope[i] / slopeRef - 1.6)
+      const bare = clamp01((0.005 - w.soft[i]) / 0.005)
+      c = mix3(c, pal.rock, Math.min(0.5, bare * steep * 0.85))
+      c = mix3(c, pal.scree, Math.min(0.26, (1 - bare) * steep * 0.4))
+
       const wet = w.discharge[i]
       if (wet > 0.18) c = mix3(c, pal.river, Math.min(1, (wet - 0.18) / 0.3))
+
+      // standing water the drainage left behind: a tarn reads as water, not turf
+      if (w.lake[i] > 0) {
+        c = mix3(c, pal.lake, clamp01(0.45 + w.lake[i] / 0.02))
+      }
 
       const lam = Math.max(
         0,
@@ -357,7 +395,10 @@ export function forest(
     state = (state * 1664525 + 1013904223) >>> 0
     return state / 4294967296
   }
-  const slopeCap = 0.9
+  // The stronger erosion leaves a steeper island, and at the old cap the forest
+  // retreated to the few gentle shelves left. Trees hold ground rather steeper
+  // than that in reality, and the island needs the cover.
+  const slopeCap = 1.35
   for (let i = 0; i < s * s; i++) {
     const hv = w.height[i]
     if (hv < w.seaLevel + 0.012 || hv > upper) continue

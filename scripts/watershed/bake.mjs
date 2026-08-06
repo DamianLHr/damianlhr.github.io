@@ -9,7 +9,17 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createWorld, erode, basins, flowField, fillDepressions, DEFAULTS } from './erode.mjs'
+import {
+  createWorld,
+  erode,
+  wind,
+  lakes,
+  pruneIslands,
+  basins,
+  flowField,
+  fillDepressions,
+  DEFAULTS,
+} from './erode.mjs'
 import { writePNG, packTerrain } from './png.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -59,7 +69,7 @@ const C = {
  * upland and summit. Steepness and wetness then override altitude, which is
  * what makes cliffs grey at any height and valley floors green.
  */
-function makeGroundColor(bands, slopeRef) {
+function makeGroundColor(bands, slopeRef, world) {
   const band = (h) => {
     if (h <= bands[0]) return 0
     for (let k = 1; k < bands.length; k++) {
@@ -67,10 +77,15 @@ function makeGroundColor(bands, slopeRef) {
     }
     return 1
   }
-  return (h, slope, wet) => {
+  return (h, slope, wet, i) => {
     if (h < SEA) {
       const t = Math.max(0, Math.min(1, (SEA - h) / 0.1))
       return mix(C.shallow, C.deep, t)
+    }
+    // standing water on the land reads as a lake, not as ground
+    if (world && i !== undefined && world.lake && world.lake[i] > 0) {
+      const t = Math.max(0, Math.min(1, world.lake[i] / 0.03))
+      return mix(C.shallow, C.deep, t * 0.8)
     }
     const e = band(h)
     let c
@@ -82,6 +97,12 @@ function makeGroundColor(bands, slopeRef) {
     // cliffs: steep ground shows bare rock whatever the altitude
     const cliff = Math.max(0, Math.min(1, (slope / slopeRef - 1.15) / 1.6))
     c = mix(c, C.rockHi, cliff)
+    // ground the water and wind stripped down to bedrock reads as stone; where
+    // the loose cover survives it reads as the material it is
+    if (world && i !== undefined) {
+      const cover = Math.max(0, Math.min(1, world.soft[i] / 0.02))
+      c = mix(mix(c, C.rock, 0.45), c, cover)
+    }
     // snow only high *and* gentle
     const snow = Math.max(0, Math.min(1, (e - 0.84) / 0.16)) * (1 - cliff * 0.85)
     c = mix(c, C.snow, snow)
@@ -137,20 +158,27 @@ function analyse(w) {
  * so the sites come out of the terrain rather than being sprinkled on top.
  * Returns normalised 0..1 coordinates with the basin each site belongs to.
  */
-function townSites(w, a, bas, count) {
+function townSites(w, a, bas, count, lakeDepth) {
   const s = w.size
   const cand = []
   for (let y = 2; y < s - 2; y += 2) {
     for (let x = 2; x < s - 2; x += 2) {
       const i = y * s + x
       if (w.height[i] < SEA) continue
-      // distance to water, in cells, capped
+      // a lake bed is above sea level but still under water
+      if (lakeDepth && lakeDepth[i] > 0) continue
+      // distance to water, in cells, capped. A lake shore counts as fresh water
+      // just as a river does — those are the places worth settling.
       let nearWater = 99
       for (let dy = -6; dy <= 6 && nearWater > 1; dy += 2) {
         for (let dx = -6; dx <= 6; dx += 2) {
           const j = (y + dy) * s + (x + dx)
           if (j < 0 || j >= s * s) continue
-          if (w.height[j] < SEA || w.discharge[j] > a.maxD * 0.06) {
+          if (
+            w.height[j] < SEA ||
+            w.discharge[j] > a.maxD * 0.06 ||
+            (lakeDepth && lakeDepth[j] > 0)
+          ) {
             nearWater = Math.min(nearWater, Math.hypot(dx, dy))
           }
         }
@@ -191,7 +219,7 @@ function renderTop(w, a, gc) {
   for (let i = 0; i < s * s; i++) {
     const h = w.height[i]
     const wet = a.maxD > 0 ? Math.min(1, w.discharge[i] / (a.maxD * 0.12)) : 0
-    let c = gc(h, a.slope[i], wet)
+    let c = gc(h, a.slope[i], wet, i)
     if (h >= SEA) {
       const lam = Math.max(0, a.nrm[i * 3] * L[0] + a.nrm[i * 3 + 1] * L[1] + a.nrm[i * 3 + 2] * L[2])
       const shade = 0.45 + 0.75 * lam
@@ -251,7 +279,7 @@ function renderOblique(w, a, gc, { width = 1200, height = 760, zScale = 300, til
       const i = y * s + x
       const h = w.height[i]
       const wet = a.maxD > 0 ? Math.min(1, w.discharge[i] / (a.maxD * 0.12)) : 0
-      let c = gc(h, a.slope[i], wet)
+      let c = gc(h, a.slope[i], wet, i)
       if (h >= SEA) {
         const lam = Math.max(0, a.nrm[i * 3] * L[0] + a.nrm[i * 3 + 1] * L[1] + a.nrm[i * 3 + 2] * L[2])
         const shade = 0.4 + 0.8 * lam
@@ -311,6 +339,11 @@ mkdirSync(PREVIEW, { recursive: true })
 const t0 = Date.now()
 console.log(`watershed: ${SIZE}x${SIZE}, ${STEPS} steps x ${DROPS} drops, seed ${SEED}`)
 const world = createWorld({ size: SIZE, seed: SEED, seaLevel: SEA, landFraction: +arg('land', 0.44) })
+
+// Clear the offshore specks before spending any particles on them, so the
+// simulation's whole budget goes into the island the site is about.
+const prunedBefore = pruneIslands(world, SEA)
+
 const { totalSteps } = erode(world, {
   steps: STEPS,
   dropsPerStep: DROPS,
@@ -319,10 +352,19 @@ const { totalSteps } = erode(world, {
   onStep: (t, n) => process.stdout.write(`\r  eroding ${((t / n) * 100).toFixed(0)}%   `),
 })
 process.stdout.write('\r')
+
+// Wind comes after the water: it works on what the rivers exposed, stripping
+// the loose cover off ground that stands into the prevailing wind and banking it
+// in the lee.
+const blown = wind(world, { particles: Math.round(SIZE * 18), seed: SEED + 2, params: { seaLevel: SEA } })
+
+// Erosion calves off new specks of its own — cut them too.
+const prunedAfter = pruneIslands(world, SEA)
 const simMs = Date.now() - t0
 
 const a = analyse(world)
 const routed = fillDepressions(world, SEA)
+const lake = lakes(world, SEA, 0.002, routed)
 const bas = basins(world, SEA, Math.round(SIZE * SIZE * 0.004), routed)
 const down = flowField(world, SEA, routed)
 
@@ -344,12 +386,28 @@ for (let i = 0; i < SIZE * SIZE; i++) {
   if (cur >= 0 && world.height[cur] < SEA) reachSea++
 }
 
+let bare = 0
+let softSum = 0
+let maxSoft = 0
+let maxLake = 0
+for (let i = 0; i < SIZE * SIZE; i++) {
+  if (world.height[i] >= SEA) {
+    softSum += world.soft[i]
+    if (world.soft[i] <= DEFAULTS.softCover) bare++
+    if (world.soft[i] > maxSoft) maxSoft = world.soft[i]
+  }
+  if (lake.depth[i] > maxLake) maxLake = lake.depth[i]
+}
+
 console.log(
   [
     `  sim ${(simMs / 1000).toFixed(1)}s · ${(totalSteps / 1e6).toFixed(1)}M particle-steps`,
     `  land ${((landCells / (SIZE * SIZE)) * 100).toFixed(1)}% · rivers ${((riverCells / landCells) * 100).toFixed(1)}% of land`,
     `  drains to sea ${((reachSea / landCells) * 100).toFixed(1)}% · basins ${bas.count}`,
     `  max height ${maxH.toFixed(3)} · max discharge ${a.maxD.toFixed(1)}`,
+    `  islands ${prunedBefore.components}→${prunedBefore.kept} before, ${prunedAfter.components}→${prunedAfter.kept} after (${prunedBefore.sunk + prunedAfter.sunk} cells sunk)`,
+    `  bare rock ${((bare / landCells) * 100).toFixed(0)}% of land · mean cover ${(softSum / landCells).toFixed(4)} · wind moved ${blown.moved.toFixed(2)}`,
+    `  lakes ${lake.cells} cells (${((lake.cells / landCells) * 100).toFixed(1)}% of land) · deepest ${maxLake.toFixed(3)}`,
   ].join('\n'),
 )
 
@@ -365,19 +423,37 @@ if (!flag('preview-only')) {
   for (let i = 0; i < SIZE * SIZE; i++) basin[i] = bas.label[i] < 0 ? 0 : Math.min(255, bas.label[i] + 1)
   writePNG(join(OUT, 'basin.png'), SIZE, SIZE, basin, 1)
 
+  // surface.png: what the ground is made of, and where water stands on it.
+  //   R — thickness of loose cover (bedrock shows through where this is 0)
+  //   G — lake depth
+  // Both are normalised against the run's own maxima, which travel in world.json
+  // so the theme decodes exactly what was baked.
+  const surfScale = Math.max(1e-6, maxSoft)
+  const lakeScale = Math.max(1e-6, maxLake)
+  const surface = new Uint8Array(SIZE * SIZE * 3)
+  for (let i = 0; i < SIZE * SIZE; i++) {
+    surface[i * 3] = Math.round(Math.min(1, world.soft[i] / surfScale) * 255)
+    surface[i * 3 + 1] = Math.round(Math.min(1, lake.depth[i] / lakeScale) * 255)
+    surface[i * 3 + 2] = 0
+  }
+  writePNG(join(OUT, 'surface.png'), SIZE, SIZE, surface, 3)
+
   // town sites and basin metadata the theme places content on
   const meta = {
     size: SIZE,
     seaLevel: SEA,
     maxDischarge: a.maxD,
     basins: bas.count,
-    sites: townSites(world, a, bas, 26),
+    softScale: +surfScale.toFixed(6),
+    lakeScale: +lakeScale.toFixed(6),
+    sites: townSites(world, a, bas, 26, lake.depth),
   }
   writeFileSync(join(OUT, 'world.json'), JSON.stringify(meta))
   console.log(`  wrote terrain.png + basin.png + world.json to ${OUT}`)
 }
 
-const gc = makeGroundColor(hypsometry(world), a.slopeRef)
+world.lake = lake.depth
+const gc = makeGroundColor(hypsometry(world), a.slopeRef, world)
 writePNG(join(PREVIEW, 'preview-top.png'), SIZE, SIZE, renderTop(world, a, gc), 3)
 const ob = renderOblique(world, a, gc)
 writePNG(join(PREVIEW, 'preview-oblique.png'), ob.width, ob.height, ob.px, 3)

@@ -260,6 +260,31 @@ still stashed.*
       against sites predicted offline — plus mobile at 375×812 (no horizontal
       scroll, mesh halves to 130k tris), a clean console, 65 tests, and no
       `__shot` reference in `dist/`.
+- [x] **Erosion round two, 2026-08-07** (Damyan: take more from the reference
+      write-ups, tint the trees, drop the edge islets, seamless water, make the
+      island more interesting). From the meandering-rivers post, sediment
+      capacity now scales with **discharge** (`cEq = drop·(1 + entrainment·erf(0.4·Q))`)
+      instead of with the fall alone. Measuring rather than guessing found the
+      real control: **`momentumTransfer` 2 → 8**, and deleting the old
+      cutting-damper that was cancelling the very mechanism it sat on top of —
+      together the share of water carried by the busiest 1% of cells went
+      **0.11 → 0.27**. Meanders themselves still do not appear (sinuosity flat),
+      which matches the earlier finding that they want flatter floodplains than
+      this island has. From SoilMachine, a **two-material surface**: a loose
+      mantle over bedrock, taken in that order and at different rates, with a
+      per-material angle of repose (rock 0.075, loose 0.021) — that gap is what
+      leaves cliffs standing with scree gathered under them. From the wind post,
+      a **particle wind pass** after the water: grains lift off ground standing
+      into the wind and bank in its lee, and bare rock weathers in place rather
+      than being sanded away. Lakes come free from the depression fill already
+      computed for routing — the difference between the filled surface and the
+      ground *is* the lake — and render as their own quads at each basin's spill
+      level, sharing the sea's material. Offshore specks and anything near the
+      frame are sunk and feathered into the sea floor (12 components → 1), deep
+      enough not to leave pale shoals where they were. Trees blend between a cold
+      conifer and a warmer broadleaf, biased by elevation. 16 bake tests (71
+      total), including the load-bearing one that cover correlates negatively
+      with slope, without which cliffs and scree cannot emerge.
 - [ ] Open: a11y/keyboard route to towns + non-WebGL fallback; perf soak; whether
       `coming-soon` projects should get a town at all (only released projects are
       placed, so those two pages fly to the island overview instead of a place);

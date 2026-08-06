@@ -226,6 +226,55 @@ export function createScene(
   sea.renderOrder = 1
   scene.add(sea)
 
+  // --- lakes -----------------------------------------------------------------
+  // Standing water the drainage left in its hollows. Each cell gets a quad at
+  // its own filled level rather than one shared plane — these sit at whatever
+  // height their basin brimmed to, hundreds of units apart up the mountain, and
+  // a single plane could only ever be right for one of them. Same material as
+  // the sea, so tarn and ocean are visibly the same substance.
+  let lakeMesh: THREE.Mesh | null = null
+  {
+    const cells: number[] = []
+    for (let i = 0; i < world.lake.length; i++) if (world.lake[i] > 0) cells.push(i)
+    if (cells.length > 0) {
+      const pos = new Float32Array(cells.length * 4 * 3)
+      const idx = new Uint32Array(cells.length * 6)
+      const corner = new THREE.Vector3()
+      cells.forEach((i, k) => {
+        const gx = i % size
+        const gy = (i / size) | 0
+        const level = world.height[i] + world.lake[i]
+        const quad = [
+          [gx - 0.5, gy - 0.5],
+          [gx + 0.5, gy - 0.5],
+          [gx + 0.5, gy + 0.5],
+          [gx - 0.5, gy + 0.5],
+        ]
+        quad.forEach(([qx, qy], c) => {
+          corner.copy(toWorld(qx, qy, level, size))
+          const o = (k * 4 + c) * 3
+          pos[o] = corner.x
+          pos[o + 1] = corner.y
+          pos[o + 2] = corner.z
+        })
+        const v = k * 4
+        const t = k * 6
+        idx[t] = v
+        idx[t + 1] = v + 2
+        idx[t + 2] = v + 1
+        idx[t + 3] = v
+        idx[t + 4] = v + 3
+        idx[t + 5] = v + 2
+      })
+      const lakeGeo = new THREE.BufferGeometry()
+      lakeGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+      lakeGeo.setIndex(new THREE.BufferAttribute(idx, 1))
+      lakeMesh = new THREE.Mesh(lakeGeo, seaMat)
+      lakeMesh.renderOrder = 1
+      scene.add(lakeMesh)
+    }
+  }
+
   // --- trees -----------------------------------------------------------------
   // Fewer, bigger trees. At the pixel-art buffer a 9000-strong forest of thin
   // cones landed under a pixel each and read as green speckle sprayed over the
@@ -259,8 +308,20 @@ export function createScene(
       // shade each tree by the ground's occlusion so groves darken in valleys
       const gi = Math.min(size - 1, Math.round(t.y)) * size + Math.min(size - 1, Math.round(t.x))
       const shade = 0.5 + 0.6 * surf.ao[gi]
-      // banded on the same ladder as the ground so groves step with the hills
-      const tc = posterise([0.1 * shade, (0.2 + (i % 7) * 0.012) * shade, 0.085 * shade])
+      // A stand of one flat green reads as a texture rather than as woodland.
+      // Each tree gets a deterministic blend between a cold, dark conifer and a
+      // warmer broadleaf, pulled colder as it climbs — so the uplands go dark
+      // and the valley woods stay warm, and the treeline reads as a change in
+      // species rather than a change in brightness. Kept narrow on purpose: at
+      // this pixel size anything wider turns the forest into confetti.
+      const hash = ((Math.imul(i + 1, 2654435761) >>> 9) & 2047) / 2047
+      const climb = Math.max(0, Math.min(1, (t.h - world.seaLevel) / 0.3))
+      const warmth = Math.max(0, Math.min(1, hash * 0.7 + (1 - climb) * 0.5 - 0.2))
+      const tc = posterise([
+        (0.062 + 0.085 * warmth) * shade,
+        (0.163 + 0.075 * warmth) * shade,
+        (0.088 - 0.028 * warmth) * shade,
+      ])
       col.setRGB(tc[0], tc[1], tc[2])
       treeMesh.setColorAt(i, col)
     }
@@ -408,6 +469,7 @@ export function createScene(
       seaMat.dispose()
       bedGeo.dispose()
       bedMat.dispose()
+      lakeMesh?.geometry.dispose()
       treeMesh?.geometry.dispose()
       ;(treeMesh?.material as THREE.Material | undefined)?.dispose()
       renderer.dispose()
