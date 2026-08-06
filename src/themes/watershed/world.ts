@@ -263,12 +263,24 @@ export function bakeSurface(w: World, pal: Palette = NATURAL): Surface {
     return v.map((c) => c / l)
   })()
 
+  // How far the submerged colour has to travel to reach the flat seabed plane.
+  // The depth ramp alone does not get there: the bake's border falloff leaves the
+  // outer ring only just under water, so it stays near `shallow` and the mesh
+  // edge drew a straight lighter-blue line across the ocean against the seabed.
+  // Fading to `deep` by the border makes the two agree exactly at the seam, while
+  // the shelf around the island keeps its shoals.
+  const EDGE_MARGIN = Math.max(1, s * 0.14)
+
   const colors = new Float32Array(n * 3)
   for (let i = 0; i < n; i++) {
     const hv = h[i]
     let c: [number, number, number]
     if (hv < sea) {
       c = mix3(pal.shallow, pal.deep, clamp01((sea - hv) / 0.1))
+      const x = i % s
+      const y = (i / s) | 0
+      const edge = clamp01(Math.min(x, y, s - 1 - x, s - 1 - y) / EDGE_MARGIN)
+      c = mix3(pal.deep, c, edge)
     } else {
       const e = bandOf(hv)
       if (e < 0.06) c = pal.sand as [number, number, number]
@@ -305,6 +317,30 @@ export function bakeSurface(w: World, pal: Palette = NATURAL): Surface {
   return { colors, slope, ao, bands }
 }
 
+/** Grove size, in grid cells — the wavelength of the stand/clearing pattern. */
+const GROVE_SCALE = 22
+
+/**
+ * Smoothed value noise in [0,1], used only to decide where stands of trees sit.
+ * Hash-based so it needs no table and stays deterministic for a given seed.
+ */
+function groveMask(x: number, y: number, seed: number): number {
+  const h2 = (ix: number, iy: number) => {
+    let v = (Math.imul(ix, 374761393) + Math.imul(iy, 668265263) + Math.imul(seed, 69069)) >>> 0
+    v = Math.imul(v ^ (v >>> 13), 1274126177) >>> 0
+    return ((v ^ (v >>> 16)) >>> 0) / 4294967296
+  }
+  const fx = x / GROVE_SCALE
+  const fy = y / GROVE_SCALE
+  const ix = Math.floor(fx)
+  const iy = Math.floor(fy)
+  const sx = (t => t * t * (3 - 2 * t))(fx - ix)
+  const sy = (t => t * t * (3 - 2 * t))(fy - iy)
+  const top = h2(ix, iy) + (h2(ix + 1, iy) - h2(ix, iy)) * sx
+  const bot = h2(ix, iy + 1) + (h2(ix + 1, iy + 1) - h2(ix, iy + 1)) * sx
+  return top + (bot - top) * sy
+}
+
 /** Where trees grow: sheltered, gentle, low-to-mid ground away from open water. */
 export function forest(
   w: World,
@@ -322,16 +358,21 @@ export function forest(
     return state / 4294967296
   }
   const slopeCap = 0.9
-  for (let i = 0; i < s * s && out.length < max; i++) {
+  for (let i = 0; i < s * s; i++) {
     const hv = w.height[i]
     if (hv < w.seaLevel + 0.012 || hv > upper) continue
     if (surf.slope[i] > slopeCap * 0.02) continue
     if (w.discharge[i] > 0.22) continue
-    // denser in sheltered ground, thinner on exposed shoulders
-    const p = 0.16 * (0.35 + 0.65 * surf.ao[i])
-    if (rnd() > p) continue
     const x = i % s
     const y = (i / s) | 0
+    // denser in sheltered ground, thinner on exposed shoulders
+    let p = 0.16 * (0.35 + 0.65 * surf.ao[i])
+    // Per-cell probability alone is a uniform sprinkle, and once the frame is
+    // pixelated an even sprinkle is just green noise over the relief. Gating on
+    // a low-frequency mask gathers trees into stands with clearings between
+    // them, so the hachured valleys and the erosion fans stay readable.
+    p *= clamp01((groveMask(x, y, seed) - 0.4) / 0.22)
+    if (p <= 0 || rnd() > p) continue
     out.push({
       x: x + rnd() - 0.5,
       y: y + rnd() - 0.5,
@@ -339,5 +380,13 @@ export function forest(
       scale: 0.7 + rnd() * 0.7,
     })
   }
-  return out
+  // `max` is a budget, not a stopping point. Breaking out of the scan the moment
+  // it filled cut the forest by raster order — a spatial cut, not a thinning, so
+  // the rows the scan never reached went bald while the first rows stayed dense.
+  // Walking the finished list at a fixed stride thins evenly across the island.
+  if (out.length <= max) return out
+  const stride = out.length / max
+  const kept: typeof out = []
+  for (let i = 0; i < max; i++) kept.push(out[Math.floor(i * stride)])
+  return kept
 }

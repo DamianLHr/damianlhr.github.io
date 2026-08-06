@@ -227,14 +227,18 @@ export function createScene(
   scene.add(sea)
 
   // --- trees -----------------------------------------------------------------
-  const trees = forest(world, surf, 9000)
+  // Fewer, bigger trees. At the pixel-art buffer a 9000-strong forest of thin
+  // cones landed under a pixel each and read as green speckle sprayed over the
+  // hills; thinning the count and growing the crowns lets neighbours merge into
+  // groves that hold their shape once the frame is upscaled.
+  const trees = forest(world, surf, 5200)
   let treeMesh: THREE.InstancedMesh | null = null
   if (trees.length > 0) {
     const cell = PLANE / (size - 1)
-    const trunk = new THREE.CylinderGeometry(cell * 0.16, cell * 0.22, cell * 1.1, 4)
-    trunk.translate(0, cell * 0.55, 0)
-    const crown = new THREE.ConeGeometry(cell * 0.85, cell * 2.6, 6)
-    crown.translate(0, cell * 2.1, 0)
+    const trunk = new THREE.CylinderGeometry(cell * 0.22, cell * 0.3, cell * 1.3, 4)
+    trunk.translate(0, cell * 0.65, 0)
+    const crown = new THREE.ConeGeometry(cell * 1.25, cell * 3.2, 6)
+    crown.translate(0, cell * 2.5, 0)
     const treeGeo = mergeGeometries([trunk, crown])
     // Per-instance colour only reaches the fragment stage when USE_COLOR is
     // defined, so the geometry needs a (white) vertex-colour attribute for
@@ -334,6 +338,15 @@ export function createScene(
     }
 
     controls.update()
+
+    // Ride the dome along with the camera, or the far plane eats a hole in the
+    // sky. Parked at the origin, its far side sits `radius + cameraDistance`
+    // away — past `camera.far` as soon as the camera backs off the island — and
+    // the clipped facets read as a black lozenge hanging over the horizon.
+    // Only x/z follow: the centre stays at y = 0 so the gradient's horizon band
+    // keeps meeting the water exactly where it does now.
+    skydome.position.set(camera.position.x, 0, camera.position.z)
+
     renderer.render(scene, camera)
     for (const cb of frameCbs) cb()
     raf = requestAnimationFrame(frame)

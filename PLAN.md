@@ -243,8 +243,27 @@ still stashed.*
       POSTs its own rendered frame to disk so a headless review can actually look
       at GPU output. Excluded from production builds. This is what caught the
       cone-shaped island, the grey scree, the sea seam and the marker bugs.
+- [x] **Defect round + pixel-art pass closed out 2026-08-07.** Damyan's six reports
+      (atlas divider running into the sea, atlas bleeding past the neatline,
+      shoreline z-fighting, the ocean's step at the mesh edge, nonsensical
+      navigation targets, the sky/sea seam) all verified fixed in-browser, and the
+      posterised pixel-art treatment is in. Three further bugs the verification
+      itself turned up: the **skydome was clipped by the camera's far plane**
+      (dome radius 500 + camera distance > `far` 600) and hung a black lozenge
+      over the horizon — the dome now rides the camera in x/z; **`forest()` cut
+      its tree budget by raster order**, so one end of the island went bald the
+      moment the cap bit — it now thins evenly by stride; and submerged terrain
+      near the mesh border never reached the seabed's colour, which is what was
+      still drawing a straight line across the ocean. Trees regrouped into stands
+      via a low-frequency grove mask (they read as green speckle once pixelated).
+      Verified per route that every flight lands on its own town — measured
+      against sites predicted offline — plus mobile at 375×812 (no horizontal
+      scroll, mesh halves to 130k tris), a clean console, 65 tests, and no
+      `__shot` reference in `dist/`.
 - [ ] Open: a11y/keyboard route to towns + non-WebGL fallback; perf soak; whether
-      true high-sinuosity meanders are worth chasing (momentum coupling
+      `coming-soon` projects should get a town at all (only released projects are
+      placed, so those two pages fly to the island overview instead of a place);
+      whether true high-sinuosity meanders are worth chasing (momentum coupling
       channelises strongly — peak discharge 0.5 → 7.9 — but measured sinuosity
       does not rise; real meanders want flatter floodplains than this island has)
 - **GATE — "watershed approved":** live review on Damyan's hardware.
