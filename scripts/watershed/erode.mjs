@@ -138,12 +138,24 @@ export function createWorld({
     if (height[i] < lo) lo = height[i]
     if (height[i] > hi) hi = height[i]
   }
-  // A linear stretch leaves a dome of high ground; this curve pulls the mid
-  // range down so most of the island is workable lowland with a few real
-  // uplands, which is also what gives erosion somewhere to carry sediment to.
+  // Split the elevation range in two rather than curving it smoothly.
+  //
+  // A single power curve gives a hill that is gentler at the bottom, but its
+  // gradient never actually approaches zero, and a river needs somewhere very
+  // nearly level to wander across — measured, the old lowland still fell at
+  // 0.021 per cell, which is quite steep enough to hold every channel on its
+  // fall line. So the lower `plainSplit` of the range is compressed into
+  // `plainHeight` of the final height: a real coastal plain, with the uplands
+  // expanded into everything above it so the island keeps its mountains.
+  const PLAIN_SPLIT = 0.52
+  const PLAIN_HEIGHT = 0.17
   for (let i = 0; i < height.length; i++) {
     const t = (height[i] - lo) / (hi - lo)
-    height[i] = Math.pow(t, 1.45)
+    height[i] =
+      t < PLAIN_SPLIT
+        ? Math.pow(t / PLAIN_SPLIT, 1.25) * PLAIN_HEIGHT
+        : PLAIN_HEIGHT +
+          Math.pow((t - PLAIN_SPLIT) / (1 - PLAIN_SPLIT), 1.35) * (1 - PLAIN_HEIGHT)
   }
 
   // Calibrate against the distribution rather than trusting a magic constant:
@@ -161,31 +173,37 @@ export function createWorld({
         : (h / Math.max(1e-6, shoreValue)) * seaLevel
   }
 
-  // A thin mantle of loose material over bedrock (SoilMachine's layered soil,
-  // reduced to the two layers that actually change the silhouette). Water strips
-  // this first and only then bites into rock, at a fraction of the rate — which
-  // is what lets a hard shoulder stand as a cliff while the slope below it wears
-  // back. Where the mantle survives it avalanches at a much lower angle than
-  // rock, so cliffs get scree aprons instead of a uniform slope.
-  const soft = new Float32Array(size * size)
+  // A mantle of loose material over bedrock, sorted by grain size (SoilMachine's
+  // layered soil, cut down to the three grades that change what the ground
+  // looks like and how it stands). Water takes them fine-first, each holds a
+  // different angle, and each is dropped by a different strength of flow — so
+  // gravel lines the fast channels, sand banks the shores and silt spreads flat
+  // across the slack lowland. That silt is what a meander needs: a floodplain
+  // loose and level enough for a river to wander across.
+  const gravel = new Float32Array(size * size)
+  const sand = new Float32Array(size * size)
+  const silt = new Float32Array(size * size)
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const nx = (x / size) * scale
       const ny = (y / size) * scale
       const i = y * size + x
+      const weathered = 0.006 + 0.02 * fbm(nx * 1.7 + 91.4, ny * 1.7 - 63.2, seed + 777, 4)
       // never more loose material than there is ground to stand on — the deep
       // sea floor sits below the mantle's own thickness
-      soft[i] = Math.min(
-        Math.max(0, height[i]),
-        0.008 + 0.026 * fbm(nx * 1.7 + 91.4, ny * 1.7 - 63.2, seed + 777, 4),
-      )
+      const room = Math.max(0, height[i])
+      gravel[i] = Math.min(room * 0.4, weathered * 0.45)
+      sand[i] = Math.min(room * 0.3, weathered * 0.35)
+      silt[i] = Math.min(room * 0.3, weathered * 0.2)
     }
   }
 
   return {
     size,
     height,
-    soft,
+    gravel,
+    sand,
+    silt,
     discharge: new Float32Array(size * size),
     momentumX: new Float32Array(size * size),
     momentumY: new Float32Array(size * size),
@@ -196,6 +214,111 @@ export function createWorld({
 }
 
 const clampi = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v)
+
+/**
+ * The grades of loose material, coarsest first, over bedrock.
+ *
+ * `repose` is SoilMachine's `maxdiff` — the steepest height difference a grade
+ * will hold before it slides. The spread across the table is the whole point:
+ * bedrock stands as cliff, gravel piles into scree, silt lies almost dead flat.
+ * `drop` is the flow speed below which the grade settles out, which is what
+ * sorts the bed — coarse where the water is quick, fine where it slackens.
+ */
+export const MATERIALS = {
+  gravel: { repose: 0.055, drop: 0.5, erodibility: 0.55 },
+  sand: { repose: 0.026, drop: 0.17, erodibility: 0.85 },
+  silt: { repose: 0.009, drop: 0.0, erodibility: 1.0 },
+  rock: { repose: 0.095, erodibility: 0.28 },
+}
+
+/** Total loose cover above bedrock. */
+export const loose = (w, i) => w.gravel[i] + w.sand[i] + w.silt[i]
+
+/** The grade a cascade or a colour should read at this cell. */
+export function topMaterial(w, i, cover = 0.0015) {
+  if (w.silt[i] > cover) return 'silt'
+  if (w.sand[i] > cover) return 'sand'
+  if (w.gravel[i] > cover) return 'gravel'
+  return 'rock'
+}
+
+/**
+ * Remove `amount` of surface, fine grades first, and report what came away.
+ * Rock only yields once everything loose above it is gone, and then grudgingly —
+ * that difference is what leaves hard ribs standing out of worn ground.
+ */
+function strip(w, i, amount) {
+  let want = amount
+  let got = 0
+  for (const grade of ['silt', 'sand', 'gravel']) {
+    if (want <= 0) break
+    const have = w[grade][i]
+    if (have <= 0) continue
+    const take = Math.min(have, want / MATERIALS[grade].erodibility)
+    w[grade][i] -= take
+    got += take
+    want -= take * MATERIALS[grade].erodibility
+  }
+  if (want > 0) got += want * MATERIALS.rock.erodibility
+  w.height[i] -= got
+  return got
+}
+
+/**
+ * Lay `amount` down as whichever grade this strength of flow can no longer
+ * carry: a busy channel keeps the fines moving and leaves gravel behind, slack
+ * water drops silt. `flow` is normalised discharge, 0..1.
+ *
+ * Grading on the particle's raw speed instead looked right and wasn't — that
+ * value is renormalised to a constant step length every iteration, so it sat
+ * above the coarse threshold almost always and the bed came out gravel
+ * everywhere, with silt at 0.00001 and two of the three grades doing nothing.
+ */
+function lay(w, i, amount, flow) {
+  const grade =
+    flow >= MATERIALS.gravel.drop ? 'gravel' : flow >= MATERIALS.sand.drop ? 'sand' : 'silt'
+  w[grade][i] += amount
+  w.height[i] += amount
+}
+
+/**
+ * SimpleHydrology's `cascade`, run at the particle's own position every step
+ * rather than as an occasional sweep of the whole map.
+ *
+ * This is the piece that was missing. Sediment dropped by a particle is spread
+ * by the next one that passes, so valley floors level off into real floodplains
+ * instead of staying as the lumpy fall line they were deposited on — and a flat
+ * floodplain is the precondition for a river to meander across it at all.
+ */
+function cascade(w, x, y, P) {
+  const s = w.size
+  if (x < 1 || y < 1 || x >= s - 1 || y >= s - 1) return
+  const i = y * s + x
+  const neighbours = []
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue
+      const j = (y + dy) * s + (x + dx)
+      neighbours.push(j)
+    }
+  }
+  neighbours.sort((a, b) => w.height[a] - w.height[b])
+
+  for (const j of neighbours) {
+    if (w.height[j] >= w.height[i]) break
+    const grade = topMaterial(w, i)
+    if (grade === 'rock') continue // bedrock does not flow; it stands
+    const diff = w.height[i] - w.height[j]
+    const excess = diff - MATERIALS[grade].repose
+    if (excess <= 0) continue
+    const transfer = Math.min(w[grade][i], (P.settling * excess) / 2)
+    if (transfer <= 0) continue
+    w[grade][i] -= transfer
+    w.height[i] -= transfer
+    w[grade][j] += transfer
+    w.height[j] += transfer
+  }
+}
 
 /** Surface normal from finite differences — no triangulation, no directional bias. */
 function normalAt(w, x, y) {
@@ -226,11 +349,16 @@ export const DEFAULTS = {
   density: 1.0,
   evapRate: 0.001,
   depositionRate: 0.12,
-  entrainment: 4.0,
+  /** The reference's own value. With capacity scaled by discharge this sets how
+   *  much more a river can carry than open hillside. */
+  entrainment: 10.0,
   /** Normalises unbounded discharge into 0..1 for the capacity term. */
   entrainScale: 0.4,
-  /** hard ceiling on suspended load — the guard against runaway entrainment */
-  maxConcentration: 0.03,
+  /** Hard ceiling on suspended load — the guard against runaway entrainment.
+   *  Raised from 0.03 once capacity became discharge-scaled: the cap was
+   *  binding in every channel, which flattened the difference between a river
+   *  and a rivulet that the whole model turns on. */
+  maxConcentration: 0.08,
   maxSteps: 1200,
   /** Stream coupling — measured to be the single strongest control on whether
    *  flow gathers into rivers at all. Raising it from 2 to 8 took the share of
@@ -243,21 +371,15 @@ export const DEFAULTS = {
   averaging: 0.02,
   // land
   seaLevel: 0.32,
-  /** Angle of repose, as height per cell. Too tight and avalanching planes the
-   *  whole island into a smooth dome — this is what cliffs live or die by.
-   *  Bedrock holds a much steeper face than loose material; the gap between the
-   *  two is what makes a cliff read as a cliff with scree gathered under it. */
-  reposeRock: 0.075,
-  reposeSoft: 0.021,
-  /** Below this thickness a cell counts as bare rock for avalanching. */
-  softCover: 0.004,
-  /** How much of the effort spent cutting rock actually removes rock. Loose
-   *  material goes first and freely; bedrock resists, so channels incise
-   *  through the mantle quickly and then slow against the rock beneath. */
-  rockResistance: 0.28,
-  thermalRate: 0.35,
-  /** run avalanching every N timesteps rather than every one */
-  thermalEvery: 5,
+  /** How much of the excess over the angle of repose moves per cascade. The
+   *  reference runs this hot (0.8) and cascades at every particle step, which
+   *  is what levels valley floors into floodplains instead of leaving the
+   *  lumpy fall line the sediment was dropped on. */
+  settling: 0.8,
+  /** Bedrock creeps too, just far more slowly and at a much steeper angle. Run
+   *  as an occasional sweep, since nothing about it is local to a particle. */
+  thermalRate: 0.25,
+  thermalEvery: 12,
   // wind (see `wind()`) — a light pass, run after the water has done its work
   windDir: [0.82, -0.57],
   windSuspension: 0.0009,
@@ -348,21 +470,15 @@ function descend(w, px, py, P) {
     if (cEq > P.maxConcentration) cEq = P.maxConcentration
     const cDiff = cEq - sediment
 
-    // Take the loose mantle first and only then bite into rock, which yields a
-    // fraction of the same effort. Channels cut quickly down to bedrock and
-    // then slow against it, so the hard ground stands out as ribs and cliffs
+    // Take the fine grades first and only then bite into rock, which yields a
+    // fraction of the same effort. Channels cut quickly through the mantle and
+    // then slow against bedrock, so hard ground stands out as ribs and cliffs
     // rather than everything wearing down together.
     const change = effD * cDiff
-    if (change > 0) {
-      const fromSoft = Math.min(w.soft[i], change)
-      const removed = fromSoft + (change - fromSoft) * P.rockResistance
-      w.soft[i] -= fromSoft
-      w.height[i] -= removed
-      sediment += removed
-    } else {
+    if (change > 0) sediment += strip(w, i, change)
+    else {
       const add = -change
-      w.height[i] += add
-      w.soft[i] += add
+      lay(w, i, add, dCap)
       sediment -= add
     }
 
@@ -372,6 +488,9 @@ function descend(w, px, py, P) {
 
     x = nxp
     y = nyp
+
+    // settle the ground the particle just worked, right where it worked it
+    cascade(w, jx, jy, P)
   }
 
   // Whatever the particle still carries is laid down where it stops — silently
@@ -382,37 +501,34 @@ function descend(w, px, py, P) {
   const fy = clampi(Math.floor(y), 1, s - 2)
   const fi = fy * s + fx
   if (sediment > 0 && w.height[fi] >= P.seaLevel) {
-    const laid = Math.min(sediment, P.maxConcentration)
-    w.height[fi] += laid
-    w.soft[fi] += laid
+    // a particle that has run out of water is not carrying anything coarse
+    lay(w, fi, Math.min(sediment, P.maxConcentration), 0)
+    cascade(w, fx, fy, P)
   }
 
   return steps
 }
 
 /**
- * Avalanching: material above the angle of repose slides to lower neighbours.
- *
- * The repose angle is per material (SoilMachine's `maxdiff`). Loose ground
- * gives way at a shallow angle, bare rock holds a much steeper one — so a rock
- * shoulder stays a cliff while everything shed off it gathers below as scree.
- * A single repose for both is what previously smoothed the island into a dome.
- * Whatever slides arrives loose, whether it left as rock or as sediment.
+ * Bedrock creep: rock standing steeper than it can hold shears off and arrives
+ * below as gravel. Loose material is handled by `cascade` at the particle, so
+ * this pass only ever looks at faces that are bare rock — which is what keeps
+ * cliffs from being quietly rounded away between particle visits.
  */
 function thermal(w, P, iterations = 1) {
   const s = w.size
   const h = w.height
-  const soft = w.soft
   const delta = new Float32Array(s * s)
-  const softDelta = new Float32Array(s * s)
+  const gravelDelta = new Float32Array(s * s)
+  const repose = MATERIALS.rock.repose
   for (let it = 0; it < iterations; it++) {
     delta.fill(0)
-    softDelta.fill(0)
+    gravelDelta.fill(0)
     for (let y = 1; y < s - 1; y++) {
       for (let x = 1; x < s - 1; x++) {
         const i = y * s + x
         if (h[i] < P.seaLevel) continue
-        const repose = soft[i] > P.softCover ? P.reposeSoft : P.reposeRock
+        if (topMaterial(w, i) !== 'rock') continue
         let lowest = -1
         let maxDiff = repose
         for (let dy = -1; dy <= 1; dy++) {
@@ -430,14 +546,13 @@ function thermal(w, P, iterations = 1) {
           const move = (maxDiff - repose) * P.thermalRate
           delta[i] -= move
           delta[lowest] += move
-          softDelta[i] -= Math.min(soft[i], move)
-          softDelta[lowest] += move
+          gravelDelta[lowest] += move // shattered rock lands as scree
         }
       }
     }
     for (let i = 0; i < s * s; i++) {
       h[i] += delta[i]
-      soft[i] = Math.max(0, soft[i] + softDelta[i])
+      w.gravel[i] = Math.max(0, w.gravel[i] + gravelDelta[i])
     }
   }
 }
@@ -535,22 +650,25 @@ export function wind(w, { particles = 9000, seed = 21, params = {} } = {}) {
       const hit = Math.max(0, Math.min(1, facing))
       const shelter = Math.max(0, Math.min(1, -facing))
 
-      if (w.soft[i] > P.softCover) {
-        const lift = Math.min(w.soft[i] - P.softCover, P.windSuspension * (0.25 + hit))
-        w.soft[i] -= lift
+      // Wind moves sand. Gravel is too heavy for it and silt is bound into the
+      // damp floodplain, so a breeze that shifted every grade equally would
+      // quietly undo the sorting the water spent the whole run establishing.
+      if (w.sand[i] > 0) {
+        const lift = Math.min(w.sand[i], P.windSuspension * (0.25 + hit))
+        w.sand[i] -= lift
         w.height[i] -= lift
         carrying += lift
         moved += lift
-      } else {
-        // bare rock: weather it into loose grains in place, no height change
-        w.soft[i] = Math.min(w.height[i], w.soft[i] + P.windAbrasion * hit)
+      } else if (topMaterial(w, i) === 'rock') {
+        // bare rock: weather it into sand in place, no height change
+        w.sand[i] = Math.min(w.height[i], w.sand[i] + P.windAbrasion * hit)
       }
 
       const settle = carrying * P.windSettle * (1 + shelter * 6)
       if (settle > 0) {
         carrying -= settle
         w.height[i] += settle
-        w.soft[i] += settle
+        w.sand[i] += settle
       }
 
       x += vx
@@ -563,7 +681,7 @@ export function wind(w, { particles = 9000, seed = 21, params = {} } = {}) {
     const fi = fy * s + fx
     if (carrying > 0 && w.height[fi] >= P.seaLevel) {
       w.height[fi] += carrying
-      w.soft[fi] += carrying
+      w.sand[fi] += carrying
     }
   }
   return { moved }
@@ -694,7 +812,9 @@ export function pruneIslands(
     // pale shoals exactly where the islands had been — the ghost of the thing
     // we removed, since the water colour only reaches full depth at 0.1 down.
     w.height[i] = seaLevel - 0.12 - (w.height[i] - seaLevel) * 0.1
-    w.soft[i] = 0
+    w.gravel[i] = 0
+    w.sand[i] = 0
+    w.silt[i] = 0
     sunk++
   }
 

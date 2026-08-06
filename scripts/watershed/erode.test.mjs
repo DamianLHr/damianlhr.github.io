@@ -4,6 +4,7 @@ import {
   erode,
   wind,
   lakes,
+  loose,
   pruneIslands,
   fillDepressions,
   flowField,
@@ -99,14 +100,43 @@ describe('erosion', () => {
     expect(topPercent / total).toBeGreaterThan(0.2)
   })
 
-  it('keeps the loose layer physical: never negative, never above the ground', () => {
+  it('keeps the loose layers physical: never negative, never above the ground', () => {
     const w = small()
     run(w, 300)
-    for (let i = 0; i < w.soft.length; i++) {
-      expect(Number.isFinite(w.soft[i])).toBe(true)
-      expect(w.soft[i]).toBeGreaterThanOrEqual(0)
-      expect(w.soft[i]).toBeLessThanOrEqual(w.height[i] + 1e-6)
+    for (let i = 0; i < w.height.length; i++) {
+      for (const grade of ['gravel', 'sand', 'silt']) {
+        expect(Number.isFinite(w[grade][i])).toBe(true)
+        expect(w[grade][i]).toBeGreaterThanOrEqual(0)
+      }
+      expect(loose(w, i)).toBeLessThanOrEqual(w.height[i] + 1e-6)
     }
+  })
+
+  it('sorts the bed by grain: gravel in the fast water, silt in the slack', () => {
+    // The whole reason for carrying three grades. If deposition does not sort
+    // them, they are three names for one material.
+    const w = createWorld({ size: 128, seed: 3, seaLevel: SEA, landFraction: 0.44 })
+    erode(w, { steps: 600, dropsPerStep: 90, seed: 11 })
+    let maxD = 0
+    for (let i = 0; i < w.height.length; i++) if (w.discharge[i] > maxD) maxD = w.discharge[i]
+    let fastGravel = 0
+    let fastSilt = 0
+    let slackGravel = 0
+    let slackSilt = 0
+    for (let i = 0; i < w.height.length; i++) {
+      if (w.height[i] < SEA) continue
+      if (w.discharge[i] > maxD * 0.25) {
+        fastGravel += w.gravel[i]
+        fastSilt += w.silt[i]
+      } else if (w.discharge[i] < maxD * 0.02) {
+        slackGravel += w.gravel[i]
+        slackSilt += w.silt[i]
+      }
+    }
+    // coarse where the water is quick, fine where it slackens
+    expect(fastGravel / Math.max(1e-9, fastSilt)).toBeGreaterThan(
+      slackGravel / Math.max(1e-9, slackSilt),
+    )
   })
 
   it('strips cover off the steep and gathers it in the hollows', () => {
@@ -133,10 +163,10 @@ describe('erosion', () => {
     for (let k = 0; k < slopes.length; k++) {
       const [, i] = slopes[k]
       if (k < slopes.length * 0.25) {
-        flatCover += w.soft[i]
+        flatCover += loose(w, i)
         flatN++
       } else if (k > slopes.length * 0.75) {
-        steepCover += w.soft[i]
+        steepCover += loose(w, i)
         steepN++
       }
     }
@@ -155,7 +185,7 @@ describe('wind', () => {
     let max = 0
     for (let i = 0; i < w.height.length; i++) {
       expect(Number.isFinite(w.height[i])).toBe(true)
-      expect(w.soft[i]).toBeGreaterThanOrEqual(0)
+      expect(loose(w, i)).toBeGreaterThanOrEqual(0)
       after += w.height[i]
       if (w.height[i] > max) max = w.height[i]
     }

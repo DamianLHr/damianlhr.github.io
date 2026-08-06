@@ -285,6 +285,31 @@ still stashed.*
       conifer and a warmer broadleaf, biased by elevation. 16 bake tests (71
       total), including the load-bearing one that cover correlates negatively
       with slope, without which cliffs and scree cannot emerge.
+- [x] **Erosion round three, 2026-08-07** (Damyan: terrain good enough for
+      meanders, more materials, realistic and refined; pointed at
+      github.com/weigert/SimpleHydrology). Reading the reference source rather
+      than the write-ups found the piece that was missing: it cascades **at the
+      particle's own position every step**, with a low `maxdiff` (0.01) and a
+      hot `settling` (0.8), where this bake swept the whole map every fifth
+      timestep at a much steeper repose. Sediment a particle drops is now spread
+      by the next one through, so valley floors level into real floodplains.
+      Ground carries **three grades over bedrock** — gravel, sand, silt — each
+      with its own repose and erodibility, taken fine-first and laid down by how
+      strong the flow is, which sorts the bed: gravel in the fast channels, sand
+      on the wind-worked shores, silt across the slack lowland. The landform got
+      an explicit **coastal plain** (lower 52% of the range compressed into 17%
+      of the height) for the rivers to wander over. Measured, at production size:
+      channelisation **0.31**, rivers **0.6% → 3.0% of land**, sinuosity **1.24
+      and now rising with run length** where it used to fall. Two measurement
+      bugs found on the way, both of which had been quietly steering decisions:
+      the old sinuosity metric counted grid hops rather than distance (so it
+      could never exceed ~1.0 and read as "meanders never form"), and deposition
+      graded on the particle's raw speed, which is renormalised to a constant
+      each step — so the bed came out gravel everywhere and silt sat at 0.00001,
+      leaving two of the three grades doing nothing.
+- [ ] Honest limit: sinuosity 1.24 is "sinuous", with reaches to 1.36. Textbook
+      meandering is >1.5 and wants a flatter, wetter world than an island with
+      mountains on it — the remaining lever is the landform, not the erosion.
 - [ ] Open: a11y/keyboard route to towns + non-WebGL fallback; perf soak; whether
       `coming-soon` projects should get a town at all (only released projects are
       placed, so those two pages fly to the island overview instead of a place);

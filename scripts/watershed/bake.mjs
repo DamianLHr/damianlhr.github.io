@@ -15,6 +15,7 @@ import {
   wind,
   lakes,
   pruneIslands,
+  topMaterial,
   basins,
   flowField,
   fillDepressions,
@@ -55,6 +56,8 @@ const C = {
   dirt: [122, 96, 66],
   rock: [122, 118, 112],
   rockHi: [156, 152, 146],
+  scree: [146, 138, 126],
+  silt: [124, 118, 88],
   snow: [236, 238, 240],
   river: [64, 108, 146],
 }
@@ -97,11 +100,13 @@ function makeGroundColor(bands, slopeRef, world) {
     // cliffs: steep ground shows bare rock whatever the altitude
     const cliff = Math.max(0, Math.min(1, (slope / slopeRef - 1.15) / 1.6))
     c = mix(c, C.rockHi, cliff)
-    // ground the water and wind stripped down to bedrock reads as stone; where
-    // the loose cover survives it reads as the material it is
+    // read the ground as the grade actually lying on it
     if (world && i !== undefined) {
-      const cover = Math.max(0, Math.min(1, world.soft[i] / 0.02))
-      c = mix(mix(c, C.rock, 0.45), c, cover)
+      const grade = topMaterial(world, i)
+      if (grade === 'rock') c = mix(c, C.rock, 0.5)
+      else if (grade === 'gravel') c = mix(c, C.scree, 0.42)
+      else if (grade === 'sand') c = mix(c, C.sand, 0.3)
+      else c = mix(c, C.silt, 0.3)
     }
     // snow only high *and* gentle
     const snow = Math.max(0, Math.min(1, (e - 0.84) / 0.16)) * (1 - cliff * 0.85)
@@ -386,18 +391,17 @@ for (let i = 0; i < SIZE * SIZE; i++) {
   if (cur >= 0 && world.height[cur] < SEA) reachSea++
 }
 
-let bare = 0
-let softSum = 0
-let maxSoft = 0
+const grades = { rock: 0, gravel: 0, sand: 0, silt: 0 }
+let maxGrain = 0
 let maxLake = 0
 for (let i = 0; i < SIZE * SIZE; i++) {
   if (world.height[i] >= SEA) {
-    softSum += world.soft[i]
-    if (world.soft[i] <= DEFAULTS.softCover) bare++
-    if (world.soft[i] > maxSoft) maxSoft = world.soft[i]
+    grades[topMaterial(world, i)]++
+    maxGrain = Math.max(maxGrain, world.gravel[i], world.sand[i], world.silt[i])
   }
   if (lake.depth[i] > maxLake) maxLake = lake.depth[i]
 }
+const pct = (n) => `${((n / landCells) * 100).toFixed(0)}%`
 
 console.log(
   [
@@ -406,7 +410,7 @@ console.log(
     `  drains to sea ${((reachSea / landCells) * 100).toFixed(1)}% · basins ${bas.count}`,
     `  max height ${maxH.toFixed(3)} · max discharge ${a.maxD.toFixed(1)}`,
     `  islands ${prunedBefore.components}→${prunedBefore.kept} before, ${prunedAfter.components}→${prunedAfter.kept} after (${prunedBefore.sunk + prunedAfter.sunk} cells sunk)`,
-    `  bare rock ${((bare / landCells) * 100).toFixed(0)}% of land · mean cover ${(softSum / landCells).toFixed(4)} · wind moved ${blown.moved.toFixed(2)}`,
+    `  surface: rock ${pct(grades.rock)} · gravel ${pct(grades.gravel)} · sand ${pct(grades.sand)} · silt ${pct(grades.silt)} · wind moved ${blown.moved.toFixed(2)}`,
     `  lakes ${lake.cells} cells (${((lake.cells / landCells) * 100).toFixed(1)}% of land) · deepest ${maxLake.toFixed(3)}`,
   ].join('\n'),
 )
@@ -424,19 +428,20 @@ if (!flag('preview-only')) {
   writePNG(join(OUT, 'basin.png'), SIZE, SIZE, basin, 1)
 
   // surface.png: what the ground is made of, and where water stands on it.
-  //   R — thickness of loose cover (bedrock shows through where this is 0)
-  //   G — lake depth
-  // Both are normalised against the run's own maxima, which travel in world.json
-  // so the theme decodes exactly what was baked.
-  const surfScale = Math.max(1e-6, maxSoft)
+  //   R,G,B — thickness of gravel / sand / silt (bedrock shows where all are 0)
+  //   A     — lake depth
+  // Normalised against the run's own maxima, which travel in world.json so the
+  // theme decodes exactly what was baked.
+  const grainScale = Math.max(1e-6, maxGrain)
   const lakeScale = Math.max(1e-6, maxLake)
-  const surface = new Uint8Array(SIZE * SIZE * 3)
+  const surface = new Uint8Array(SIZE * SIZE * 4)
   for (let i = 0; i < SIZE * SIZE; i++) {
-    surface[i * 3] = Math.round(Math.min(1, world.soft[i] / surfScale) * 255)
-    surface[i * 3 + 1] = Math.round(Math.min(1, lake.depth[i] / lakeScale) * 255)
-    surface[i * 3 + 2] = 0
+    surface[i * 4] = Math.round(Math.min(1, world.gravel[i] / grainScale) * 255)
+    surface[i * 4 + 1] = Math.round(Math.min(1, world.sand[i] / grainScale) * 255)
+    surface[i * 4 + 2] = Math.round(Math.min(1, world.silt[i] / grainScale) * 255)
+    surface[i * 4 + 3] = Math.round(Math.min(1, lake.depth[i] / lakeScale) * 255)
   }
-  writePNG(join(OUT, 'surface.png'), SIZE, SIZE, surface, 3)
+  writePNG(join(OUT, 'surface.png'), SIZE, SIZE, surface, 4)
 
   // town sites and basin metadata the theme places content on
   const meta = {
@@ -444,7 +449,7 @@ if (!flag('preview-only')) {
     seaLevel: SEA,
     maxDischarge: a.maxD,
     basins: bas.count,
-    softScale: +surfScale.toFixed(6),
+    grainScale: +grainScale.toFixed(6),
     lakeScale: +lakeScale.toFixed(6),
     sites: townSites(world, a, bas, 26, lake.depth),
   }

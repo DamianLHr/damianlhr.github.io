@@ -11,7 +11,7 @@ export interface WorldMeta {
   maxDischarge: number
   basins: number
   /** the run's own maxima, so surface.png decodes back to what was baked */
-  softScale?: number
+  grainScale?: number
   lakeScale?: number
   sites: { x: number; y: number; h: number; basin: number }[]
 }
@@ -25,8 +25,10 @@ export interface World {
   discharge: Float32Array
   /** drainage basin id, 0 for sea */
   basin: Uint8Array
-  /** thickness of loose cover; 0 is bare bedrock */
-  soft: Float32Array
+  /** thickness of each loose grade above bedrock; all zero means bare rock */
+  gravel: Float32Array
+  sand: Float32Array
+  silt: Float32Array
   /** depth of standing water on the land — the lakes the drainage filled */
   lake: Float32Array
   meta: WorldMeta
@@ -61,9 +63,11 @@ export async function loadWorld(base = import.meta.env.BASE_URL): Promise<World>
   const height = new Float32Array(n)
   const discharge = new Float32Array(n)
   const basin = new Uint8Array(n)
-  const soft = new Float32Array(n)
+  const gravel = new Float32Array(n)
+  const sand = new Float32Array(n)
+  const silt = new Float32Array(n)
   const lake = new Float32Array(n)
-  const softScale = meta.softScale ?? 1
+  const grainScale = meta.grainScale ?? 1
   const lakeScale = meta.lakeScale ?? 1
   for (let i = 0; i < n; i++) {
     const o = i * 4
@@ -71,10 +75,23 @@ export async function loadWorld(base = import.meta.env.BASE_URL): Promise<World>
     height[i] = ((terrain.data[o] << 8) | terrain.data[o + 1]) / 65535
     discharge[i] = terrain.data[o + 2] / 255
     basin[i] = basinImg.data[i * 4]
-    soft[i] = (surfaceImg.data[o] / 255) * softScale
-    lake[i] = (surfaceImg.data[o + 1] / 255) * lakeScale
+    gravel[i] = (surfaceImg.data[o] / 255) * grainScale
+    sand[i] = (surfaceImg.data[o + 1] / 255) * grainScale
+    silt[i] = (surfaceImg.data[o + 2] / 255) * grainScale
+    lake[i] = (surfaceImg.data[o + 3] / 255) * lakeScale
   }
-  return { size: terrain.w, seaLevel: meta.seaLevel, height, discharge, basin, soft, lake, meta }
+  return {
+    size: terrain.w,
+    seaLevel: meta.seaLevel,
+    height,
+    discharge,
+    basin,
+    gravel,
+    sand,
+    silt,
+    lake,
+    meta,
+  }
 }
 
 // --- shading ------------------------------------------------------------------
@@ -90,6 +107,8 @@ export interface Palette {
   rockHi: [number, number, number]
   /** loose stone gathered below a face — warmer and lighter than the cliff itself */
   scree: [number, number, number]
+  /** fine alluvium over the slack lowland */
+  silt: [number, number, number]
   snow: [number, number, number]
   river: [number, number, number]
   lake: [number, number, number]
@@ -161,6 +180,7 @@ export const NATURAL: Palette = {
   rock: [0.47, 0.45, 0.43],
   rockHi: [0.62, 0.6, 0.58],
   scree: [0.55, 0.5, 0.44],
+  silt: [0.38, 0.36, 0.24],
   snow: [0.93, 0.94, 0.95],
   river: [0.22, 0.4, 0.56],
   lake: [0.12, 0.28, 0.42],
@@ -314,18 +334,26 @@ export function bakeSurface(w: World, pal: Palette = NATURAL): Surface {
       const snow = clamp01((e - 0.84) / 0.16) * (1 - cliff * 0.85)
       c = mix3(c, pal.snow, snow)
 
-      // What the ground is *made of*, not just how high it sits. The bake tracks
-      // a loose layer over bedrock: where water and wind have stripped it the
-      // stone shows through, and where it has gathered it reads as scree.
+      // What the ground is *made of*, not just how high it sits. The bake sorts
+      // the loose cover into grades and this reads whichever one is lying on
+      // top: bare rock on the stripped faces, gravel where a channel or a cliff
+      // foot has left it, sand along the wind-worked shores, silt over the
+      // slack lowland. That sorting is emergent, so the colour follows the
+      // simulation rather than the elevation band.
       //
-      // Both terms are gated on slope. Two thirds of the island sits below the
-      // cover threshold, so tinting on thickness alone greyed the whole thing
-      // into chalk — thin soil on the flat still grows grass, and it is only on
-      // ground steep enough to shed that bare rock actually shows.
-      const steep = clamp01(slope[i] / slopeRef - 1.6)
-      const bare = clamp01((0.005 - w.soft[i]) / 0.005)
-      c = mix3(c, pal.rock, Math.min(0.5, bare * steep * 0.85))
-      c = mix3(c, pal.scree, Math.min(0.26, (1 - bare) * steep * 0.4))
+      // Weighted rather than switched: a hard cut between grades tiles the
+      // island into flat patches, and the grades genuinely overlap on the ground.
+      const cover = w.gravel[i] + w.sand[i] + w.silt[i]
+      if (cover > 1e-6) {
+        const k = 1 / cover
+        const stony = clamp01(slope[i] / slopeRef - 1.2)
+        c = mix3(c, pal.scree, Math.min(0.45, w.gravel[i] * k * (0.3 + stony * 0.5)))
+        c = mix3(c, pal.sand, Math.min(0.3, w.sand[i] * k * 0.34))
+        c = mix3(c, pal.silt, Math.min(0.34, w.silt[i] * k * 0.36))
+      }
+      // stripped to bedrock, and steep enough that it shows
+      const bare = clamp01((0.004 - cover) / 0.004)
+      c = mix3(c, pal.rock, Math.min(0.5, bare * clamp01(slope[i] / slopeRef - 1.1) * 0.85))
 
       const wet = w.discharge[i]
       if (wet > 0.18) c = mix3(c, pal.river, Math.min(1, (wet - 0.18) / 0.3))
