@@ -204,6 +204,51 @@ bootstrap the taste loop before heavy 3D investment.*
       alongside — a map is hostile to screen readers); print-quality static fallback
 - **GATE 5b — "atlas approved."**
 
+### Phase 5b — `watershed` theme *(the eroded island, added 2026-08-06 on Damyan's ask)*
+*Damyan asked for a naturalistic 2.5D world after nickmcd.me's particle hydraulic
+erosion write-up, with trees, rivers, cliffs and dirt, fully orbitable, simulated
+at build time. `atlas` parked (still live at `?theme=atlas`), A-tile "Blaeu Maior"
+still stashed.*
+- [x] **Erosion runs at build time** (`scripts/watershed/`, `npm run bake:watershed`):
+      Lagrangian water particles descend a heightfield exchanging sediment by an
+      equilibrium mass-transfer law, with the reference's discharge+momentum maps
+      exponentially averaged so flow concentrates into channels. 512², 3000 steps,
+      ~22 s, 26M particle-steps. Emits `terrain.png` (height 16-bit in R,G +
+      discharge in B), `basin.png`, `world.json` (town sites + metadata) into
+      `public/watershed/`; PNGs written by a dependency-free encoder over
+      node:zlib. 10 property tests (determinism, no runaway, mass, drainage).
+      Fixes found by eye against baked previews: falloff multiplied into height
+      made every island a cone that drained in radial spokes (now a low-frequency
+      continent field decides land, added as bias not multiplier); sea level is
+      derived from the height distribution rather than a constant; entrainment is
+      bounded (peaks had hit 4.08 and silted the sea); particle sediment is
+      returned to the ground instead of discarded (it was planing the island
+      flat); repose loosened and thermal erosion run every 5th step (it was
+      smoothing away every cliff); priority-flood depression fill took drainage
+      from 16% → 100%; a hard border falloff stops land touching the map edge,
+      which had stranded everything upstream of it.
+- [x] **Renderer** (`?theme=watershed`, weight 6): displaced heightmap mesh,
+      522k tris, orbit camera (three.js OrbitControls), instanced low-poly
+      forest, translucent sea over an opaque seabed, fog. Colour, sun and
+      ambient occlusion are **baked into vertex colours** — the sun never moves,
+      so no lit material and no shadow pass; plain WebGL 2, no WebGPU. Measured
+      ~214 fps at 522k tris; mesh halves to 130k on coarse pointers.
+      Deliberately the opposite cost profile to `singularity`.
+- [x] **Content on the terrain**: watersheds become provinces, schools/employers/
+      projects/interests are towns placed on sites the simulation scored for
+      gentle low ground beside water, spread by farthest-point sampling; project
+      towns are clickable and navigation flies the camera down to them. Camera
+      framing offsets the island out from under whichever panel is showing.
+- [x] **Dev-only screenshot sink** (`vite.config.ts` → `design/shots/`): the page
+      POSTs its own rendered frame to disk so a headless review can actually look
+      at GPU output. Excluded from production builds. This is what caught the
+      cone-shaped island, the grey scree, the sea seam and the marker bugs.
+- [ ] Open: a11y/keyboard route to towns + non-WebGL fallback; perf soak; whether
+      true high-sinuosity meanders are worth chasing (momentum coupling
+      channelises strongly — peak discharge 0.5 → 7.9 — but measured sinuosity
+      does not rise; real meanders want flatter floodplains than this island has)
+- **GATE — "watershed approved":** live review on Damyan's hardware.
+
 ### Phase 6 — `blueprint` theme *(industrial, ~2–3 sessions)*
 - [ ] Style tile: 2–3 industrial treatments (teenage.engineering register: spec grids,
       safety-orange/black, monospace; where the gaming twist lives — e.g. konami-style

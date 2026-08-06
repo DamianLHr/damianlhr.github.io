@@ -616,4 +616,10 @@
   .ws-region {
     display: none;
   }
+  /* the debug HUD owns the corner the sheet needs */
+  .ws-hud {
+    bottom: auto;
+    top: 60px;
+    left: 0.6rem;
+  }
 }
