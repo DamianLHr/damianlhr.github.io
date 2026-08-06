@@ -27,6 +27,17 @@ export const themes: ThemeDescriptor[] = [
     load: () => import('./singularity'),
   },
   {
+    id: 'watershed',
+    name: 'Watershed',
+    description:
+      'An island eroded by a real hydraulic simulation — orbit the valleys its rivers cut.',
+    requirements: { webgl2: true },
+    // in build (PLAN Phase 6); reachable from the switcher until its gate
+    weight: 6,
+    listed: true,
+    load: () => import('./watershed'),
+  },
+  {
     id: 'atlas',
     name: 'Atlas',
     description:

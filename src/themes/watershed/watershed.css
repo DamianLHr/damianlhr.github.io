@@ -1,0 +1,619 @@
+/* watershed — an eroded island you orbit.
+   Daylight theme: the land carries the colour, so the interface is glass and
+   ink over it and stays out of the way. Its own palette and primitives; nothing
+   is shared with julia, singularity or atlas. */
+
+.ws {
+  --ws-sky: #bcc9d6;
+  --ws-ink: #10161c;
+  --ws-paper: #f4f2ec;
+  --ws-muted: #5d6874;
+  --ws-accent: #1d6a8f;
+  --ws-accent-warm: #c2683a;
+  --ws-glass: rgba(244, 242, 236, 0.9);
+  --ws-ease: cubic-bezier(0.22, 0.68, 0.24, 1);
+
+  position: relative;
+  min-height: 100dvh;
+  background: var(--ws-sky);
+  color: var(--ws-ink);
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  /* marker positions are expressed in container units */
+  container-type: size;
+}
+
+.ws-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  cursor: grab;
+}
+
+.ws-canvas:active {
+  cursor: grabbing;
+}
+
+/* ---------- boot & failure ---------- */
+
+.ws-boot {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  display: grid;
+  place-content: center;
+  gap: 0.4rem;
+  text-align: center;
+  background: var(--ws-sky);
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+
+.ws-dim {
+  color: var(--ws-muted);
+  font-size: 0.85rem;
+}
+
+/* ---------- map markers ---------- */
+
+.ws-markers {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.ws-markers > * {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
+  transition: opacity 200ms linear;
+}
+
+.ws-region {
+  font-size: 0.66rem;
+  font-weight: 500;
+  letter-spacing: 0.34em;
+  color: var(--ws-paper);
+  text-shadow: 0 1px 10px rgba(8, 16, 22, 0.85);
+  white-space: nowrap;
+}
+
+.ws-place {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.1rem 0.42rem 0.1rem 0.3rem;
+  border-radius: 999px;
+  background: var(--ws-glass);
+  border: 1px solid rgba(16, 22, 28, 0.18);
+  box-shadow: 0 2px 10px rgba(8, 16, 22, 0.28);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  backdrop-filter: blur(3px);
+}
+
+.ws-place i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ws-ink);
+}
+
+.ws-place-project {
+  cursor: pointer;
+  font-weight: 500;
+  transition:
+    transform 180ms var(--ws-ease),
+    background 180ms var(--ws-ease);
+}
+
+.ws-place-project i {
+  background: var(--ws-accent-warm);
+}
+
+.ws-place-school i,
+.ws-place-work i {
+  background: var(--ws-accent);
+}
+
+.ws-place-interest {
+  opacity: 0.82;
+  font-size: 0.66rem;
+}
+
+.ws-place-interest i {
+  background: var(--ws-muted);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ws-place-project:hover {
+    transform: translate(-50%, -100%) scale(1.06);
+    background: var(--ws-paper);
+  }
+}
+
+/* ---------- nav ---------- */
+
+.ws-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 54px;
+  padding: 0 clamp(1rem, 3.5vw, 2.2rem);
+  pointer-events: none;
+}
+
+.ws-nav > * {
+  pointer-events: auto;
+}
+
+.ws-mark {
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: 0.09em;
+  color: var(--ws-paper);
+  text-decoration: none;
+  text-shadow: 0 1px 10px rgba(8, 16, 22, 0.8);
+}
+
+.ws-nav nav {
+  display: flex;
+  gap: clamp(0.8rem, 2.4vw, 1.6rem);
+}
+
+.ws-nav-link {
+  position: relative;
+  color: var(--ws-paper);
+  text-decoration: none;
+  font-size: 0.88rem;
+  padding: 0.25rem 0;
+  text-shadow: 0 1px 10px rgba(8, 16, 22, 0.8);
+  opacity: 0.82;
+  transition: opacity 180ms var(--ws-ease);
+}
+
+.ws-nav-link::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--ws-accent-warm);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 200ms var(--ws-ease);
+}
+
+.ws-nav-link.ws-on {
+  opacity: 1;
+}
+
+.ws-nav-link.ws-on::after {
+  transform: scaleX(1);
+}
+
+/* ---------- hero ---------- */
+
+.ws-hero {
+  position: fixed;
+  z-index: 4;
+  left: clamp(1rem, 4vw, 3.4rem);
+  bottom: clamp(1.2rem, 5vh, 3rem);
+  width: min(30rem, calc(100vw - 2rem));
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.4rem 1.5rem 1.5rem;
+  border-radius: 14px;
+  background: var(--ws-glass);
+  border: 1px solid rgba(16, 22, 28, 0.14);
+  box-shadow: 0 18px 50px rgba(8, 16, 22, 0.3);
+  backdrop-filter: blur(10px);
+}
+
+.ws-eyebrow {
+  margin: 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--ws-accent-warm);
+}
+
+.ws-hero h1 {
+  margin: 0;
+  font-size: clamp(2rem, 4.6vw, 3.1rem);
+  font-weight: 700;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+}
+
+.ws-lede {
+  margin: 0;
+  color: var(--ws-muted);
+  line-height: 1.5;
+  font-size: 0.95rem;
+  max-width: 34ch;
+}
+
+.ws-note {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--ws-ink) 72%, var(--ws-muted));
+  border-left: 2px solid var(--ws-accent);
+  padding-left: 0.7rem;
+}
+
+.ws-socials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  font-size: 0.85rem;
+}
+
+.ws-socials a,
+.ws-out {
+  color: var(--ws-muted);
+  text-decoration: none;
+  border-bottom: 1px solid var(--ws-accent);
+  padding-bottom: 1px;
+  transition: color 160ms var(--ws-ease);
+}
+
+.ws-out {
+  display: inline-block;
+  margin: 0.35rem 1.1rem 0 0;
+}
+
+.ws-ticker {
+  font-size: 0.78rem;
+  color: var(--ws-muted);
+  text-decoration: none;
+  line-height: 1.4;
+}
+
+.ws-ticker b {
+  font-weight: 500;
+  font-size: 0.64rem;
+  letter-spacing: 0.24em;
+  color: var(--ws-accent-warm);
+}
+
+/* ---------- reading panel ---------- */
+
+.ws-panel {
+  position: fixed;
+  z-index: 5;
+  top: 54px;
+  right: clamp(0.7rem, 2.4vw, 1.8rem);
+  bottom: 1rem;
+  width: min(29rem, calc(100vw - 1.4rem));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1.5rem 1.6rem 2rem;
+  border-radius: 14px;
+  background: var(--ws-glass);
+  border: 1px solid rgba(16, 22, 28, 0.14);
+  box-shadow: 0 18px 50px rgba(8, 16, 22, 0.3);
+  backdrop-filter: blur(12px);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(16, 22, 28, 0.3) transparent;
+}
+
+.ws-panel h1 {
+  margin: 0 0 1rem;
+  font-size: clamp(1.6rem, 3.2vw, 2.2rem);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.ws-h2 {
+  margin: 1.7rem 0 0.7rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ws-accent);
+}
+
+.ws-entry {
+  margin-bottom: 1.3rem;
+}
+
+.ws-entry h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1.04rem;
+  font-weight: 500;
+}
+
+.ws-entry p {
+  margin: 0.24rem 0;
+  line-height: 1.55;
+  font-size: 0.93rem;
+}
+
+.ws-entry ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.05rem;
+  line-height: 1.55;
+  font-size: 0.9rem;
+  color: color-mix(in srgb, var(--ws-ink) 84%, var(--ws-muted));
+}
+
+.ws-entry li {
+  margin-bottom: 0.24rem;
+}
+
+.ws-meta {
+  color: var(--ws-muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.ws-meta a {
+  color: var(--ws-ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--ws-accent);
+}
+
+.ws-prose {
+  line-height: 1.6;
+  max-width: 62ch;
+  font-size: 0.94rem;
+}
+
+.ws-upnext {
+  border: 1px solid color-mix(in srgb, var(--ws-accent) 34%, transparent);
+  border-radius: 10px;
+  background: linear-gradient(120deg, rgba(29, 106, 143, 0.09), transparent 62%);
+  padding: 0.85rem 1rem 0.9rem;
+  margin-bottom: 1.2rem;
+}
+
+.ws-upnext-tag {
+  margin: 0 0 0.5rem;
+  color: var(--ws-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-size: 0.64rem;
+}
+
+.ws-upnext h3 {
+  margin: 0 0 0.15rem;
+  font-size: 0.98rem;
+  font-weight: 500;
+}
+
+.ws-upnext p {
+  margin: 0 0 0.6rem;
+  color: var(--ws-muted);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.ws-list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.ws-card {
+  display: grid;
+  gap: 0.24rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid rgba(16, 22, 28, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.35);
+  color: var(--ws-ink);
+  text-decoration: none;
+  transition:
+    transform 200ms var(--ws-ease),
+    border-color 200ms var(--ws-ease);
+}
+
+.ws-card:active {
+  transform: scale(0.985);
+}
+
+.ws-chip {
+  width: fit-content;
+  color: var(--ws-accent-warm);
+  border: 1px solid color-mix(in srgb, var(--ws-accent-warm) 45%, transparent);
+  border-radius: 999px;
+  padding: 0.1rem 0.48rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.ws-card-title {
+  font-size: 1.08rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.ws-card-sum {
+  color: var(--ws-muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.ws-back {
+  display: inline-block;
+  margin-bottom: 0.8rem;
+  color: var(--ws-muted);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.ws-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.7rem 1.1rem;
+  margin: 0 0 1.1rem;
+  padding: 0.85rem 0;
+  border-top: 1px solid rgba(16, 22, 28, 0.16);
+  border-bottom: 1px solid rgba(16, 22, 28, 0.16);
+}
+
+.ws-facts dt {
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ws-muted);
+}
+
+.ws-facts dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.92rem;
+}
+
+.ws-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1.2rem;
+  align-items: center;
+}
+
+.ws-btn {
+  display: inline-block;
+  color: var(--ws-ink);
+  text-decoration: none;
+  font-size: 0.88rem;
+  font-weight: 500;
+  border: 1px solid color-mix(in srgb, var(--ws-accent) 55%, transparent);
+  border-radius: 999px;
+  padding: 0.5rem 1.1rem;
+  transition:
+    transform 140ms var(--ws-ease),
+    background 160ms var(--ws-ease);
+}
+
+.ws-btn:active {
+  transform: scale(0.97);
+}
+
+.ws-btn-primary {
+  background: var(--ws-accent);
+  border-color: var(--ws-accent);
+  color: var(--ws-paper);
+  font-weight: 600;
+}
+
+.ws-hud {
+  position: fixed;
+  z-index: 7;
+  left: 1rem;
+  bottom: 1rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 8px;
+  background: var(--ws-glass);
+  border: 1px solid rgba(16, 22, 28, 0.16);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- hover, focus, motion ---------- */
+
+@media (hover: hover) and (pointer: fine) {
+  .ws-nav-link:hover {
+    opacity: 1;
+  }
+  .ws-nav-link:hover::after {
+    transform: scaleX(1);
+  }
+  .ws-socials a:hover,
+  .ws-out:hover,
+  .ws-back:hover,
+  .ws-meta a:hover,
+  .ws-ticker:hover {
+    color: var(--ws-accent-warm);
+  }
+  .ws-card:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--ws-accent) 55%, transparent);
+  }
+  .ws-btn:hover {
+    background: rgba(29, 106, 143, 0.12);
+  }
+  .ws-btn-primary:hover {
+    background: color-mix(in srgb, var(--ws-accent) 82%, white);
+  }
+}
+
+.ws a:focus-visible,
+.ws [role='link']:focus-visible {
+  outline: 2px solid var(--ws-accent-warm);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.ws-rise {
+  animation: ws-rise 420ms var(--ws-ease) both;
+}
+
+@keyframes ws-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ws-rise {
+    animation: ws-fade 200ms ease both;
+  }
+  @keyframes ws-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  .ws-card,
+  .ws-place-project,
+  .ws-nav-link {
+    transition: none;
+  }
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 900px) {
+  .ws-hero,
+  .ws-panel {
+    left: 0.6rem;
+    right: 0.6rem;
+    width: auto;
+  }
+  .ws-panel {
+    top: auto;
+    bottom: 0.6rem;
+    max-height: 62dvh;
+    padding: 1.2rem 1.1rem 1.5rem;
+  }
+  .ws-hero {
+    bottom: 0.6rem;
+    padding: 1.1rem 1.1rem 1.2rem;
+  }
+  /* labels get dense on a small screen — keep the clickable ones */
+  .ws-place-interest,
+  .ws-region {
+    display: none;
+  }
+}

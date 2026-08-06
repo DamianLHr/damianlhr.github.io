@@ -25,3 +25,6 @@ dist-ssr
 
 # local claude workspace (design skills are vendored third-party content)
 .claude/
+
+# dev-only render captures
+design/shots/
