@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { Surface, World } from './world'
-import { forest, posterise, SEABED_LINEAR, SEA_LINEAR } from './world'
+import { forest, posterise, FRESH_LINEAR, SEABED_LINEAR, SEA_LINEAR } from './world'
 
 // watershed — the renderer.
 //
@@ -232,10 +232,34 @@ export function createScene(
   // height their basin brimmed to, hundreds of units apart up the mountain, and
   // a single plane could only ever be right for one of them. Same material as
   // the sea, so tarn and ocean are visibly the same substance.
+  // Fresh water is its own material, and a pale, bright one. In the reference
+  // the river network is the first thing the eye lands on; tinting the bed
+  // alone left it as a faint thread that the pixel downscale swallowed.
+  const freshMat = new THREE.MeshBasicMaterial({
+    color: linear(FRESH_LINEAR),
+    transparent: true,
+    opacity: 0.82,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -3,
+    polygonOffsetUnits: -3,
+  })
   let lakeMesh: THREE.Mesh | null = null
   {
     const cells: number[] = []
     for (let i = 0; i < world.lake.length; i++) if (world.lake[i] > 0) cells.push(i)
+    // Rivers get a surface too, not just a tinted bed. Anything carrying a real
+    // share of the flow and standing above the waterline.
+    const riverCells: number[] = []
+    for (let i = 0; i < world.discharge.length; i++) {
+      if (world.lake[i] > 0) continue
+      if (world.height[i] < world.seaLevel) continue
+      // Only a real channel gets a surface. The discharge map is normalised
+      // against a quarter of the run's peak, so a low bar here puts water on
+      // every trickle and the hillsides come out sheeted in pale blue.
+      if (world.discharge[i] > 0.34) riverCells.push(i)
+    }
+    for (const i of riverCells) cells.push(i)
     if (cells.length > 0) {
       const pos = new Float32Array(cells.length * 4 * 3)
       const idx = new Uint32Array(cells.length * 6)
@@ -243,7 +267,8 @@ export function createScene(
       cells.forEach((i, k) => {
         const gx = i % size
         const gy = (i / size) | 0
-        const level = world.height[i] + world.lake[i]
+        // a lake brims to its spill level; a river just skims its own bed
+        const level = world.lake[i] > 0 ? world.height[i] + world.lake[i] : world.height[i] + 0.0012
         const quad = [
           [gx - 0.5, gy - 0.5],
           [gx + 0.5, gy - 0.5],
@@ -269,18 +294,18 @@ export function createScene(
       const lakeGeo = new THREE.BufferGeometry()
       lakeGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
       lakeGeo.setIndex(new THREE.BufferAttribute(idx, 1))
-      lakeMesh = new THREE.Mesh(lakeGeo, seaMat)
-      lakeMesh.renderOrder = 1
+      lakeMesh = new THREE.Mesh(lakeGeo, freshMat)
+      lakeMesh.renderOrder = 2
       scene.add(lakeMesh)
     }
   }
 
   // --- trees -----------------------------------------------------------------
-  // Fewer, bigger trees. At the pixel-art buffer a 9000-strong forest of thin
-  // cones landed under a pixel each and read as green speckle sprayed over the
-  // hills; thinning the count and growing the crowns lets neighbours merge into
-  // groves that hold their shape once the frame is upscaled.
-  const trees = forest(world, surf, 5200)
+  // The reference is *forested* — a near-continuous canopy with bare ground
+  // showing through only where the slope is too steep to hold it. Scattered
+  // trees on open grass was the wrong picture entirely, so this runs many more
+  // of them and lets them close up into cover.
+  const trees = forest(world, surf, detail > 1 ? 12000 : 22000)
   let treeMesh: THREE.InstancedMesh | null = null
   if (trees.length > 0) {
     const cell = PLANE / (size - 1)
@@ -317,10 +342,12 @@ export function createScene(
       const hash = ((Math.imul(i + 1, 2654435761) >>> 9) & 2047) / 2047
       const climb = Math.max(0, Math.min(1, (t.h - world.seaLevel) / 0.3))
       const warmth = Math.max(0, Math.min(1, hash * 0.7 + (1 - climb) * 0.5 - 0.2))
+      // darker and less saturated than before — the reference canopy is nearly
+      // black-green in shadow, which is what lets the bare ground read as bright
       const tc = posterise([
-        (0.062 + 0.085 * warmth) * shade,
-        (0.163 + 0.075 * warmth) * shade,
-        (0.088 - 0.028 * warmth) * shade,
+        (0.028 + 0.055 * warmth) * shade,
+        (0.062 + 0.05 * warmth) * shade,
+        (0.022 - 0.008 * warmth) * shade,
       ])
       col.setRGB(tc[0], tc[1], tc[2])
       treeMesh.setColorAt(i, col)

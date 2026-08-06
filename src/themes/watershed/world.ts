@@ -129,6 +129,8 @@ export interface Palette {
  */
 export const SEABED_LINEAR: [number, number, number] = [0.015, 0.045, 0.095]
 export const SEA_LINEAR: [number, number, number] = [0.045, 0.13, 0.26]
+/** Rivers and lakes: the pale blue measured off the reference render. */
+export const FRESH_LINEAR: [number, number, number] = [0.185, 0.372, 0.604]
 
 const toSRGB = (v: number) => (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055)
 const toLinear = (v: number) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4))
@@ -169,21 +171,31 @@ export function posterise(c: [number, number, number]): [number, number, number]
   return [toLinear(Math.min(1, r * k)), toLinear(Math.min(1, g * k)), toLinear(Math.min(1, b * k))]
 }
 
+/**
+ * Sampled off the reference render (nickmcd.me, meandering-rivers post) rather
+ * than picked by eye: a dark forest canopy over warm cream ground, grey-brown
+ * stone, and pale blue water bright enough to be the thing you see first.
+ *
+ * These are albedos, and the bake multiplies them by sun and occlusion before
+ * posterising, so they sit brighter than the lit values measured in the source
+ * image. The old palette read as pale sage and tan because it was built the
+ * other way round — lit values used as albedo, then lit again.
+ */
 export const NATURAL: Palette = {
   // must equal the seabed plane — see SEABED_LINEAR above
   deep: SEABED_LINEAR,
-  shallow: [0.2, 0.39, 0.53],
-  sand: [0.78, 0.71, 0.53],
-  grass: [0.34, 0.47, 0.22],
-  grassDry: [0.51, 0.54, 0.29],
-  dirt: [0.46, 0.36, 0.25],
-  rock: [0.47, 0.45, 0.43],
-  rockHi: [0.62, 0.6, 0.58],
-  scree: [0.55, 0.5, 0.44],
-  silt: [0.38, 0.36, 0.24],
-  snow: [0.93, 0.94, 0.95],
-  river: [0.22, 0.4, 0.56],
-  lake: [0.12, 0.28, 0.42],
+  shallow: [0.16, 0.34, 0.52],
+  sand: [0.72, 0.66, 0.49],
+  grass: [0.1, 0.18, 0.05],
+  grassDry: [0.24, 0.3, 0.09],
+  dirt: [0.3, 0.25, 0.16],
+  rock: [0.16, 0.15, 0.11],
+  rockHi: [0.44, 0.42, 0.36],
+  scree: [0.62, 0.58, 0.46],
+  silt: [0.34, 0.31, 0.19],
+  snow: [0.86, 0.87, 0.85],
+  river: [0.26, 0.48, 0.7],
+  lake: [0.22, 0.44, 0.66],
 }
 
 const mix3 = (a: number[], b: number[], t: number): [number, number, number] => [
@@ -331,7 +343,10 @@ export function bakeSurface(w: World, pal: Palette = NATURAL): Surface {
       // greys out whole hillsides that ought to read as forest and meadow.
       const cliff = clamp01((slope[i] / slopeRef - 2.6) / 3.2)
       c = mix3(c, pal.rockHi, cliff)
-      const snow = clamp01((e - 0.84) / 0.16) * (1 - cliff * 0.85)
+      // The reference has no snowline at all — its summits are bare stone and
+      // pale soil. A white cap on this island read as a different picture
+      // entirely, so it is kept to a trace on the very highest gentle ground.
+      const snow = clamp01((e - 0.96) / 0.04) * (1 - cliff * 0.9) * 0.35
       c = mix3(c, pal.snow, snow)
 
       // What the ground is *made of*, not just how high it sits. The bake sorts
@@ -355,8 +370,11 @@ export function bakeSurface(w: World, pal: Palette = NATURAL): Surface {
       const bare = clamp01((0.004 - cover) / 0.004)
       c = mix3(c, pal.rock, Math.min(0.5, bare * clamp01(slope[i] / slopeRef - 1.1) * 0.85))
 
+      // Rivers are the first thing you see in the reference, so the bed is
+      // tinted well before the water surface goes over it — a channel one cell
+      // wide otherwise disappears the moment the frame is downscaled.
       const wet = w.discharge[i]
-      if (wet > 0.18) c = mix3(c, pal.river, Math.min(1, (wet - 0.18) / 0.3))
+      if (wet > 0.2) c = mix3(c, pal.river, Math.min(0.9, (wet - 0.2) / 0.25))
 
       // standing water the drainage left behind: a tarn reads as water, not turf
       if (w.lake[i] > 0) {
@@ -435,12 +453,14 @@ export function forest(
     const x = i % s
     const y = (i / s) | 0
     // denser in sheltered ground, thinner on exposed shoulders
-    let p = 0.16 * (0.35 + 0.65 * surf.ao[i])
+    let p = 0.55 * (0.35 + 0.65 * surf.ao[i])
     // Per-cell probability alone is a uniform sprinkle, and once the frame is
     // pixelated an even sprinkle is just green noise over the relief. Gating on
     // a low-frequency mask gathers trees into stands with clearings between
-    // them, so the hachured valleys and the erosion fans stay readable.
-    p *= clamp01((groveMask(x, y, seed) - 0.4) / 0.22)
+    // them, so the erosion fans and bare faces stay readable. The gate is wide
+    // now — the reference is closer to continuous forest than to groves, and
+    // the clearings it does have are cut by slope, not by the mask.
+    p *= clamp01((groveMask(x, y, seed) - 0.26) / 0.3)
     if (p <= 0 || rnd() > p) continue
     out.push({
       x: x + rnd() - 0.5,
