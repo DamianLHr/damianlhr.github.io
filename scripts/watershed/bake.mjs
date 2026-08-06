@@ -6,11 +6,11 @@
 // a 2.5D oblique) that exist so the terrain can be judged as an image before any
 // renderer is written.
 
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createWorld, erode, basins, flowField, fillDepressions, DEFAULTS } from './erode.mjs'
-import { writePNG, packField24 } from './png.mjs'
+import { writePNG, packTerrain } from './png.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(HERE, '..', '..')
@@ -131,6 +131,54 @@ function analyse(w) {
   return { slope, nrm, maxD, slopeRef }
 }
 
+/**
+ * Where towns go. Real settlements sit on gentle, low ground beside fresh water
+ * and within reach of the coast — and the simulation already knows all three,
+ * so the sites come out of the terrain rather than being sprinkled on top.
+ * Returns normalised 0..1 coordinates with the basin each site belongs to.
+ */
+function townSites(w, a, bas, count) {
+  const s = w.size
+  const cand = []
+  for (let y = 2; y < s - 2; y += 2) {
+    for (let x = 2; x < s - 2; x += 2) {
+      const i = y * s + x
+      if (w.height[i] < SEA) continue
+      // distance to water, in cells, capped
+      let nearWater = 99
+      for (let dy = -6; dy <= 6 && nearWater > 1; dy += 2) {
+        for (let dx = -6; dx <= 6; dx += 2) {
+          const j = (y + dy) * s + (x + dx)
+          if (j < 0 || j >= s * s) continue
+          if (w.height[j] < SEA || w.discharge[j] > a.maxD * 0.06) {
+            nearWater = Math.min(nearWater, Math.hypot(dx, dy))
+          }
+        }
+      }
+      if (nearWater > 7) continue
+      const elev = (w.height[i] - SEA) / Math.max(1e-6, 1 - SEA)
+      const score =
+        1 / (1 + a.slope[i] / Math.max(1e-6, a.slopeRef) * 2.2) + // gentle ground
+        1 / (1 + Math.abs(nearWater - 2.5) * 0.5) + // beside water, not in it
+        (1 - Math.min(1, elev * 2.4)) * 0.8 // lowland
+      cand.push({ x, y, i, score })
+    }
+  }
+  cand.sort((p, q) => q.score - p.score)
+  const kept = []
+  const sep = Math.round(s * 0.09)
+  for (const c of cand) {
+    if (kept.length >= count) break
+    if (kept.every((k) => Math.hypot(k.x - c.x, k.y - c.y) > sep)) kept.push(c)
+  }
+  return kept.map((k) => ({
+    x: +(k.x / s).toFixed(4),
+    y: +(k.y / s).toFixed(4),
+    h: +w.height[k.i].toFixed(4),
+    basin: bas.label[k.i],
+  }))
+}
+
 /** Sun-lit shaded relief, top-down. */
 function renderTop(w, a, gc) {
   const s = w.size
@@ -182,7 +230,20 @@ function renderOblique(w, a, gc, { width = 1200, height = 760, zScale = 300, til
   })()
   const sx = width / s
   const sy = (height * tilt) / s
-  const originY = height * 0.30
+  const originY = height * 0.3
+
+  // Sea backdrop below the horizon. Without it, tall land columns near the front
+  // draw down past where the foreground sea rows begin, leaving vertical smears
+  // hanging under the island.
+  const horizon = Math.round(originY - SEA * zScale)
+  for (let y = Math.max(0, horizon); y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 3
+      px[i] = C.deep[0]
+      px[i + 1] = C.deep[1]
+      px[i + 2] = C.deep[2]
+    }
+  }
   const rng = (n) => ((Math.sin(n * 12.9898) * 43758.5453) % 1 + 1) % 1
 
   for (let y = 0; y < s; y++) {
@@ -205,7 +266,7 @@ function renderOblique(w, a, gc, { width = 1200, height = 760, zScale = 300, til
         // Draw each column all the way to the bottom of the frame. Back-to-front
         // order means nearer rows paint over it, so this both hides what is
         // behind and stops gaps opening between rows where the ground drops.
-        for (let yy = Math.max(0, top); yy < height; yy++) {
+        for (let yy = Math.max(0, top); yy < Math.min(height, top + 90); yy++) {
           const o = (yy * width + px0) * 3
           // the exposed earth below the surface darkens with depth
           const depth = Math.min(1, (yy - top) / 26)
@@ -293,15 +354,27 @@ console.log(
 )
 
 if (!flag('preview-only')) {
-  writePNG(join(OUT, 'height.png'), SIZE, SIZE, packField24(world.height, SIZE, SIZE), 3)
-  const aux = new Uint8Array(SIZE * SIZE * 3)
-  for (let i = 0; i < SIZE * SIZE; i++) {
-    aux[i * 3] = Math.round(255 * Math.min(1, world.discharge[i] / (a.maxD * 0.25)))
-    aux[i * 3 + 1] = Math.round(255 * Math.min(1, a.slope[i] * 12))
-    aux[i * 3 + 2] = bas.label[i] < 0 ? 0 : Math.min(255, bas.label[i] + 1)
+  // terrain.png: height (16-bit across R,G) + discharge (B). Slope and normals
+  // are derived in the shader from height rather than shipped.
+  const wet = new Float32Array(SIZE * SIZE)
+  for (let i = 0; i < SIZE * SIZE; i++) wet[i] = Math.min(1, world.discharge[i] / (a.maxD * 0.25))
+  writePNG(join(OUT, 'terrain.png'), SIZE, SIZE, packTerrain(world.height, wet, SIZE, SIZE), 3)
+
+  // basins as a single greyscale channel — flat regions, so it compresses hard
+  const basin = new Uint8Array(SIZE * SIZE)
+  for (let i = 0; i < SIZE * SIZE; i++) basin[i] = bas.label[i] < 0 ? 0 : Math.min(255, bas.label[i] + 1)
+  writePNG(join(OUT, 'basin.png'), SIZE, SIZE, basin, 1)
+
+  // town sites and basin metadata the theme places content on
+  const meta = {
+    size: SIZE,
+    seaLevel: SEA,
+    maxDischarge: a.maxD,
+    basins: bas.count,
+    sites: townSites(world, a, bas, 26),
   }
-  writePNG(join(OUT, 'aux.png'), SIZE, SIZE, aux, 3)
-  console.log(`  wrote ${join(OUT, 'height.png')} + aux.png`)
+  writeFileSync(join(OUT, 'world.json'), JSON.stringify(meta))
+  console.log(`  wrote terrain.png + basin.png + world.json to ${OUT}`)
 }
 
 const gc = makeGroundColor(hypsometry(world), a.slopeRef)

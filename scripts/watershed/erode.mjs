@@ -75,31 +75,59 @@ export function createWorld({
     for (let x = 0; x < size; x++) {
       const nx = (x / size) * scale
       const ny = (y / size) * scale
-      let h = fbm(nx, ny, seed, 7)
-      // a second, warped octave set breaks up the grid-aligned look
-      h = h * 0.72 + fbm(nx * 2.1 + h * 1.5, ny * 2.1 - h * 1.2, seed + 555, 5) * 0.28
-      // ridged noise gives mountain *chains* with valleys between them, which is
-      // where meanders can form; pure fBm only makes rolling hills
-      const ridge = 1 - Math.abs(fbm(nx * 0.85 + 7.1, ny * 0.85 + 3.3, seed + 4242, 5) * 2 - 1)
-      // only a light gate on elevation, so ranges run across the island instead
-      // of piling into one central massif
-      h += ridge * ridge * 0.5 * (0.45 + 0.55 * smooth(Math.min(1, h * 1.4)))
+
+      // Domain warping: sample the noise at coordinates that are themselves
+      // displaced by noise. Plain fBm gives isotropic lumps; warping bends them
+      // into ridges, hooks and basins that read as real landform rather than
+      // as a heightfield.
+      const wx = nx + (fbm(nx * 0.45 + 11.2, ny * 0.45 - 3.4, seed + 111, 4) - 0.5) * 2.4
+      const wy = ny + (fbm(nx * 0.45 - 7.8, ny * 0.45 + 19.6, seed + 222, 4) - 0.5) * 2.4
+      let h = fbm(wx, wy, seed, 7)
+      h = h * 0.72 + fbm(wx * 2.1 + h * 1.5, wy * 2.1 - h * 1.2, seed + 555, 5) * 0.28
+      // ridged noise gives mountain *chains* with valleys between them
+      // Gating ridges on existing elevation piles every range into one central
+      // massif, which then drains radially. Applying them evenly puts mountain
+      // chains wherever the warped noise runs, so the island has several
+      // separate uplands and the divides between them are real.
+      const ridge = 1 - Math.abs(fbm(wx * 0.9 + 7.1, wy * 0.9 + 3.3, seed + 4242, 5) * 2 - 1)
+      h += ridge * ridge * 0.46
+
       if (islandFalloff) {
-        // Radial falloff ends the landmass in sea rather than at the border, but
-        // a clean circle reads as a dinner plate — so the radius itself is
-        // perturbed by low-frequency noise, giving bays, capes and peninsulas.
-        const dx = (x / size) * 2 - 1
-        const dy = (y / size) * 2 - 1
-        // A gentle falloff turns the island into a cone, and every river then
-        // runs straight down the fall line. Keeping it as a late, steep coastal
-        // shelf leaves the interior governed by noise — which is where the low
-        // gradients that let rivers wander actually come from.
-        // Too narrow a shelf makes the whole coast one uniformly steep ring,
-        // which then reads as a continuous cliff of bare rock all the way round.
-        const warp = (fbm(nx * 0.55 + 31.7, ny * 0.55 - 17.3, seed + 909, 4) - 0.5) * 0.42
-        const d = Math.sqrt(dx * dx + dy * dy) + warp
-        h -= smooth(Math.max(0, Math.min(1, (d - 0.5) / 0.46))) * 1.55
+        // *Subtracting* a radial falloff flattens the coast into a smooth ring
+        // and makes a dinner plate, however much the radius is perturbed.
+        // Multiplying by a mask that is itself noisy keeps full detail right up
+        // to the waterline, so the sea eats in wherever the mask dips — which is
+        // what gives bays, peninsulas and offshore islets instead of a circle.
+        const ax = ((x / size) * 2 - 1) * 1.14
+        const ay = ((y / size) * 2 - 1) * 0.88
+        const d = Math.sqrt(ax * ax + ay * ay)
+        // A radial term that only ruffles the rim still yields an oval. Instead
+        // a *low-frequency* continent field decides land from sea across the
+        // whole map — at this frequency it spans only two or three lobes, so
+        // whole regions can drop below the waterline and open gulfs, straits and
+        // peninsulas. The radial term is now just a gentle bias keeping the
+        // landmass off the border.
+        const radial = 1 - smooth(Math.max(0, Math.min(1, (d - 0.18) / 0.86)))
+        const continent = fbm(nx * 0.62 + 51.3, ny * 0.62 - 29.7, seed + 321, 5)
+        const detail = fbm(nx * 2.4 + 8.9, ny * 2.4 - 4.1, seed + 654, 4)
+        const landness = continent * 0.9 + detail * 0.18 + radial * 0.26
+        const inland = smooth(Math.max(0, Math.min(1, (landness - 0.5) / 0.34)))
+        // Multiplying elevation by this mask is what made every previous island a
+        // dome: height becomes proportional to distance from the coast, which is
+        // a cone, and a cone drains in straight radial spokes no matter what
+        // noise is layered on top. Adding the mask as a *bias* instead keeps the
+        // noise at full amplitude inland, so the interior has its own basins and
+        // divides and the rivers follow those instead of the fall line.
+        h = h * 0.92 + (inland - 0.46) * 0.95
       }
+
+      // Guarantee open water around the frame. Land touching the border has
+      // nowhere to drain — flow arrives at the edge and stops, stranding every
+      // cell upstream of it — and a coastline sliced off by the map edge looks
+      // wrong from any angle.
+      const edge = Math.min(x, y, size - 1 - x, size - 1 - y) / size
+      h -= smooth(Math.max(0, Math.min(1, (0.05 - edge) / 0.05))) * 1.3
+
       height[y * size + x] = h
     }
   }
@@ -176,13 +204,18 @@ export const DEFAULTS = {
   density: 1.0,
   evapRate: 0.001,
   depositionRate: 0.12,
-  entrainment: 3.0,
+  entrainment: 6.0,
   /** hard ceiling on suspended load — the guard against runaway entrainment */
-  maxConcentration: 0.012,
+  maxConcentration: 0.03,
   maxSteps: 1200,
-  // stream coupling — this is what makes rivers meander
+  // stream coupling — this is what concentrates flow into channels
   momentumTransfer: 2.0,
-  dischargeScale: 0.4,
+  /** How fast rising discharge damps a channel's ability to cut. Set too eager
+   *  and a river stops incising the moment it becomes a river, leaving shallow
+   *  blue lines drawn on a smooth hillside instead of valleys. */
+  dischargeScale: 0.12,
+  /** floor on that damping, so big rivers keep carving rather than only paving */
+  minCutting: 0.35,
   // maps
   averaging: 0.02,
   // land
@@ -223,7 +256,7 @@ function descend(w, px, py, P) {
     // effective parameters weaken where a river already runs — established
     // channels transport rather than dig
     const d = erf(P.dischargeScale * w.discharge[i])
-    const effD = P.depositionRate * Math.max(0, 1 - d)
+    const effD = P.depositionRate * Math.max(P.minCutting, 1 - d)
     const effR = P.evapRate * (1 - 0.5 * d)
 
     // gravity
@@ -530,6 +563,29 @@ export function basins(w, seaLevel, minCells = 400, surface) {
   const big = [...counts.entries()].filter(([, c]) => c >= minCells).sort((a, b) => b[1] - a[1])
   const remap = new Map(big.map(([id], k) => [id, k]))
   for (let i = 0; i < n; i++) label[i] = label[i] >= 0 ? (remap.get(label[i]) ?? -1) : -1
+
+  // Dropping the small basins leaves holes — mostly the coastal strips where
+  // towns want to sit, so every site would report "no basin". Grow the surviving
+  // labels outward over that land instead, so all ground belongs somewhere.
+  const queue = []
+  for (let i = 0; i < n; i++) if (label[i] >= 0) queue.push(i)
+  for (let qi = 0; qi < queue.length; qi++) {
+    const i = queue[qi]
+    const x = i % s
+    const y = (i / s) | 0
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue
+        const nx = x + dx
+        const ny = y + dy
+        if (nx < 0 || ny < 0 || nx >= s || ny >= s) continue
+        const j = ny * s + nx
+        if (label[j] !== -1 || w.height[j] < seaLevel) continue
+        label[j] = label[i]
+        queue.push(j)
+      }
+    }
+  }
 
   return { label, count: big.length, sizes: big.map(([, c]) => c) }
 }

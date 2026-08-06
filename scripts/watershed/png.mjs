@@ -70,15 +70,23 @@ export function writePNG(path, w, h, pixels, channels = 3) {
   )
 }
 
-/** Pack a 0..1 field into 24-bit RGB so canvas can read it back losslessly. */
-export function packField24(field, w, h) {
+/**
+ * Pack terrain into one RGB image the browser can decode with a canvas:
+ *   R,G — height at 16-bit precision (65536 steps is far past what the mesh or
+ *         the eye can resolve, and the low byte still compresses reasonably)
+ *   B   — a second 8-bit field, used for discharge
+ *
+ * 24-bit height was the obvious first move but its lowest byte is essentially
+ * noise, which PNG cannot compress at all — this is a third smaller for detail
+ * nobody can see.
+ */
+export function packTerrain(height, extra, w, h) {
   const out = new Uint8Array(w * h * 3)
   for (let i = 0; i < w * h; i++) {
-    const v = Math.max(0, Math.min(1, field[i]))
-    const q = Math.round(v * 16777215)
-    out[i * 3] = (q >> 16) & 0xff
-    out[i * 3 + 1] = (q >> 8) & 0xff
-    out[i * 3 + 2] = q & 0xff
+    const q = Math.round(Math.max(0, Math.min(1, height[i])) * 65535)
+    out[i * 3] = (q >> 8) & 0xff
+    out[i * 3 + 1] = q & 0xff
+    out[i * 3 + 2] = Math.round(Math.max(0, Math.min(1, extra[i])) * 255)
   }
   return out
 }

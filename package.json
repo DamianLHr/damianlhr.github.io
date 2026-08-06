@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "format": "prettier --write .",
-    "check": "node scripts/check-boundaries.mjs"
+    "check": "node scripts/check-boundaries.mjs",
+    "bake:watershed": "node scripts/watershed/bake.mjs --size 512 --steps 3000 --drops 420"
   },
   "dependencies": {
     "@fontsource/im-fell-english": "^5.3.0",
