@@ -379,32 +379,40 @@ function layoutContent(world: World, content: SiteContent): Layout {
     new THREE.Vector3((gx / (size - 1) - 0.5) * PLANE, h * HEIGHT, (gy / (size - 1) - 0.5) * PLANE)
 
   const centre = pt(size / 2, size / 2, 0.34)
+
+  /**
+   * Averaging a group's positions puts the camera wherever their centroid falls
+   * — which, for places spread deliberately around the island, is usually open
+   * water in the middle. Aim at a real member of the group instead: the one
+   * nearest the group's centre, which is always on land and always somewhere
+   * the visitor can see the thing they navigated to.
+   */
+  const representative = (kind: Place['kind']) => {
+    const group = places.filter((p) => p.kind === kind)
+    if (!group.length) return null
+    const cx = group.reduce((s, p) => s + p.gx, 0) / group.length
+    const cy = group.reduce((s, p) => s + p.gy, 0) / group.length
+    return group.reduce((best, p) =>
+      Math.hypot(p.gx - cx, p.gy - cy) < Math.hypot(best.gx - cx, best.gy - cy) ? p : best,
+    )
+  }
+
   const focus = (route: ThemeProps['route']) => {
     if (route.kind === 'project') {
       const p = places.find((q) => q.slug === route.slug)
-      if (p) return { point: pt(p.gx, p.gy, p.h), distance: PLANE * 0.28 }
+      if (p) return { point: pt(p.gx, p.gy, p.h), distance: PLANE * 0.3 }
     }
     if (route.kind === 'cv') {
-      const r = regions[1] ?? regions[0]
-      if (r) return { point: pt(r.gx, r.gy, r.h), distance: PLANE * 0.5 }
+      const p = representative('school') ?? representative('work')
+      if (p) return { point: pt(p.gx, p.gy, p.h), distance: PLANE * 0.62 }
     }
     if (route.kind === 'projects') {
-      const ps = places.filter((p) => p.kind === 'project')
-      if (ps.length) {
-        const gx = ps.reduce((s, p) => s + p.gx, 0) / ps.length
-        const gy = ps.reduce((s, p) => s + p.gy, 0) / ps.length
-        const h = ps.reduce((s, p) => s + p.h, 0) / ps.length
-        return { point: pt(gx, gy, h), distance: PLANE * 0.55 }
-      }
+      const p = representative('project')
+      if (p) return { point: pt(p.gx, p.gy, p.h), distance: PLANE * 0.72 }
     }
     if (route.kind === 'interests') {
-      const ps = places.filter((p) => p.kind === 'interest')
-      if (ps.length) {
-        const gx = ps.reduce((s, p) => s + p.gx, 0) / ps.length
-        const gy = ps.reduce((s, p) => s + p.gy, 0) / ps.length
-        const h = ps.reduce((s, p) => s + p.h, 0) / ps.length
-        return { point: pt(gx, gy, h), distance: PLANE * 0.5 }
-      }
+      const p = representative('interest')
+      if (p) return { point: pt(p.gx, p.gy, p.h), distance: PLANE * 0.62 }
     }
     return { point: centre, distance: PLANE * 1.05 }
   }

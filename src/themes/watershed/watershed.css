@@ -28,6 +28,11 @@
   display: block;
   touch-action: none;
   cursor: grab;
+  /* The scene renders into a deliberately small buffer; this is what blows it
+     back up as hard pixels instead of a blurry stretch. Order matters — the
+     last supported value wins, and `pixelated` is the one we actually want. */
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
 }
 
 .ws-canvas:active {

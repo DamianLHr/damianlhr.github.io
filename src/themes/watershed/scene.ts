@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { Surface, World } from './world'
-import { forest } from './world'
+import { forest, posterise, SEABED_LINEAR, SEA_LINEAR } from './world'
 
 // watershed — the renderer.
 //
@@ -13,6 +13,23 @@ import { forest } from './world'
 
 export const PLANE = 100
 export const HEIGHT = 21
+
+/**
+ * Render small, then let CSS blow it up with nearest-neighbour — the look of
+ * the reference engine. Antialiasing is off on purpose: smoothed edges are
+ * exactly what stops a low-resolution buffer reading as pixel art.
+ */
+const PIXEL_SCALE = 0.34
+
+/** Sky at the zenith and at the waterline. The water colours live in world.ts. */
+const SKY_TOP = '#b7c8d8'
+const SKY_HORIZON = '#8fb0c4'
+
+/** Linear triple → a Color in the same working space the vertex colours use. */
+const linear = (rgb: [number, number, number]) => {
+  const p = posterise(rgb)
+  return new THREE.Color().setRGB(p[0], p[1], p[2])
+}
 
 export interface SceneOpts {
   /** 1 = full heightmap resolution, 2 = every other cell, … */
@@ -63,22 +80,72 @@ export function createScene(
   try {
     renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: true,
+      antialias: false,
       powerPreference: 'high-performance',
     })
   } catch (e) {
     console.error('watershed: WebGL unavailable', e)
     return null
   }
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75))
-  renderer.setClearColor(0xbcc9d6)
+  renderer.setPixelRatio(PIXEL_SCALE)
 
   const size = world.size
   const detail = Math.max(1, Math.round(opts.detail ?? 1))
   const N = Math.floor((size - 1) / detail) + 1
 
   const scene = new THREE.Scene()
-  scene.fog = new THREE.Fog(0xbcc9d6, PLANE * 0.9, PLANE * 2.1)
+
+  // A flat clear colour leaves a hard seam where the ocean meets the sky.
+  //
+  // This has to be a *dome*, not `scene.background`: a background texture is
+  // stretched over the whole viewport, so its gradient tracks the screen rather
+  // than the world and the horizon tone lands wherever the camera happens to
+  // point. Mapping it onto an inverted sphere pins the transition to the actual
+  // waterline, and the band below it is the sea's own colour, so ocean and sky
+  // meet in the same value. The fog is tinted to match, so distant water
+  // dissolves upward instead of ending at a line.
+  const skyCanvas = document.createElement('canvas')
+  skyCanvas.width = 4
+  skyCanvas.height = 256
+  {
+    const g = skyCanvas.getContext('2d')!
+    // Drawn in discrete steps rather than a smooth ramp, so the sky bands the
+    // same way the posterised ground does and the whole image reads as one
+    // piece. `getStyle()` converts the linear water colours to sRGB for the 2D
+    // canvas, which is the one place the conversion genuinely belongs.
+    const grad = g.createLinearGradient(0, 0, 0, 256)
+    // canvas top is v = 1 (zenith); bottom is v = 0 (below the horizon)
+    grad.addColorStop(0, SKY_TOP)
+    grad.addColorStop(0.42, SKY_HORIZON)
+    grad.addColorStop(0.5, SKY_HORIZON)
+    grad.addColorStop(0.56, linear(SEA_LINEAR).getStyle())
+    grad.addColorStop(1, linear(SEABED_LINEAR).getStyle())
+    g.fillStyle = grad
+    g.fillRect(0, 0, 4, 256)
+    const px = g.getImageData(0, 0, 4, 256)
+    for (let i = 0; i < px.data.length; i += 4) {
+      px.data[i] = Math.round((px.data[i] / 255) * 11) * (255 / 11)
+      px.data[i + 1] = Math.round((px.data[i + 1] / 255) * 11) * (255 / 11)
+      px.data[i + 2] = Math.round((px.data[i + 2] / 255) * 11) * (255 / 11)
+    }
+    g.putImageData(px, 0, 0)
+  }
+  const skyTex = new THREE.CanvasTexture(skyCanvas)
+  skyTex.colorSpace = THREE.SRGBColorSpace
+  // nearest keeps the bands hard instead of smoothing them back out
+  skyTex.magFilter = THREE.NearestFilter
+  skyTex.minFilter = THREE.NearestFilter
+  const skyGeo = new THREE.SphereGeometry(PLANE * 5, 24, 24)
+  const skyMat = new THREE.MeshBasicMaterial({
+    map: skyTex,
+    side: THREE.BackSide,
+    fog: false,
+    depthWrite: false,
+  })
+  const skydome = new THREE.Mesh(skyGeo, skyMat)
+  skydome.renderOrder = -1
+  scene.add(skydome)
+  scene.fog = new THREE.Fog(new THREE.Color(SKY_HORIZON).getHex(), PLANE * 1.1, PLANE * 3.6)
 
   // --- terrain ---------------------------------------------------------------
   const positions = new Float32Array(N * N * 3)
@@ -128,19 +195,30 @@ export function createScene(
   // An opaque seabed sits under the translucent surface. Without it the water
   // composites over the terrain on the island's shelf but over empty sky beyond
   // the mesh edge, and that difference draws a hard diagonal across the ocean.
+  // Sit the seabed flush with the terrain's lowest point. Parking it far below
+  // left a cliff at the mesh boundary — the ocean visibly dropped a step where
+  // the island's data ended.
+  let floor = Infinity
+  for (let i = 0; i < world.height.length; i++) if (world.height[i] < floor) floor = world.height[i]
   const bedGeo = new THREE.PlaneGeometry(PLANE * 24, PLANE * 24)
-  const bedMat = new THREE.MeshBasicMaterial({ color: 0x14283f })
+  const bedMat = new THREE.MeshBasicMaterial({ color: linear(SEABED_LINEAR), fog: true })
   const seabed = new THREE.Mesh(bedGeo, bedMat)
   seabed.rotation.x = -Math.PI / 2
-  seabed.position.y = -HEIGHT * 0.5
+  seabed.position.y = floor * HEIGHT
   scene.add(seabed)
 
   const seaGeo = new THREE.PlaneGeometry(PLANE * 24, PLANE * 24)
   const seaMat = new THREE.MeshBasicMaterial({
-    color: 0x2f5f86,
+    color: linear(SEA_LINEAR),
     transparent: true,
-    opacity: 0.86,
+    opacity: 0.88,
     depthWrite: false,
+    // The waterline is coplanar with the beach, so the two surfaces resolve to
+    // the same depth and shimmer against each other as the camera moves. The
+    // offset pushes the water a hair forward and settles it.
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
   })
   const sea = new THREE.Mesh(seaGeo, seaMat)
   sea.rotation.x = -Math.PI / 2
@@ -177,7 +255,9 @@ export function createScene(
       // shade each tree by the ground's occlusion so groves darken in valleys
       const gi = Math.min(size - 1, Math.round(t.y)) * size + Math.min(size - 1, Math.round(t.x))
       const shade = 0.5 + 0.6 * surf.ao[gi]
-      col.setRGB(0.1 * shade, (0.2 + (i % 7) * 0.012) * shade, 0.085 * shade)
+      // banded on the same ladder as the ground so groves step with the hills
+      const tc = posterise([0.1 * shade, (0.2 + (i % 7) * 0.012) * shade, 0.085 * shade])
+      col.setRGB(tc[0], tc[1], tc[2])
       treeMesh.setColorAt(i, col)
     }
     treeMesh.instanceMatrix.needsUpdate = true
@@ -266,6 +346,19 @@ export function createScene(
     const w = window as unknown as {
       __wsStep?: (n?: number) => void
       __shoot?: (name: string, width?: number) => Promise<string>
+    }
+    // expose the graph so a headless review can toggle pieces to isolate a bug
+    ;(w as unknown as { __wsScene?: unknown }).__wsScene = {
+      scene,
+      camera,
+      controls,
+      terrain,
+      sea,
+      seabed,
+      skydome,
+      get trees() {
+        return treeMesh
+      },
     }
     w.__wsStep = (n = 1) => {
       for (let i = 0; i < n; i++) {

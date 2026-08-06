@@ -78,8 +78,64 @@ export interface Palette {
   river: [number, number, number]
 }
 
+/**
+ * The water colours, in the renderer's **linear** working space.
+ *
+ * These are the single source of truth and are deliberately not hex literals.
+ * Vertex colours are consumed as linear, whereas `new THREE.Color(0xRRGGBB)`
+ * reads the hex as sRGB and converts — so a hand-matched hex and palette entry
+ * silently differ by a gamma curve. That mismatch is what drew a bright polygon
+ * edge across the ocean wherever the terrain mesh stopped: the seabed plane and
+ * the terrain's own deep water were nowhere near the same colour on screen.
+ *
+ * scene.ts builds its materials with `Color.setRGB(...)`, which also defaults to
+ * the working space, so both sides agree exactly with no conversion by hand.
+ */
+export const SEABED_LINEAR: [number, number, number] = [0.015, 0.045, 0.095]
+export const SEA_LINEAR: [number, number, number] = [0.045, 0.13, 0.26]
+
+const toSRGB = (v: number) => (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055)
+const toLinear = (v: number) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4))
+
+/**
+ * Snap a channel to a fixed number of steps. Quantising per channel keeps the
+ * *ordering* of the shading intact, so the baked sun and ambient occlusion
+ * survive as visible bands — the retro look while the valleys still read.
+ * Snapping to a hand-picked set of hues would throw that away.
+ *
+ * Crucially this steps in **sRGB**, not in the linear working space. Linear
+ * values bunch up near zero — deep water sits around 0.04 — so evenly spaced
+ * linear steps swallow every dark tone and fling it to the nearest coarse rung.
+ * Quantising linearly turned the ocean bright teal and washed the land yellow.
+ */
+export const POSTER_LEVELS = 7
+
+/**
+ * Band a colour's *brightness* and leave its hue alone.
+ *
+ * Rounding R, G and B independently lets the three channels land on different
+ * rungs, which drags the hue around — it turned the dirt and rock bands pink.
+ * Stepping the peak channel and rescaling the other two by the same factor
+ * keeps the ratio between them exactly, so the terrain bands hard into flat
+ * tones while brown stays brown.
+ */
+export function posterise(c: [number, number, number]): [number, number, number] {
+  const r = toSRGB(clamp01(c[0]))
+  const g = toSRGB(clamp01(c[1]))
+  const b = toSRGB(clamp01(c[2]))
+  const peak = Math.max(r, g, b)
+  if (peak <= 1e-6) return [0, 0, 0]
+  const stepped = Math.max(
+    1 / (POSTER_LEVELS - 1),
+    Math.round(peak * (POSTER_LEVELS - 1)) / (POSTER_LEVELS - 1),
+  )
+  const k = stepped / peak
+  return [toLinear(Math.min(1, r * k)), toLinear(Math.min(1, g * k)), toLinear(Math.min(1, b * k))]
+}
+
 export const NATURAL: Palette = {
-  deep: [0.07, 0.16, 0.28],
+  // must equal the seabed plane — see SEABED_LINEAR above
+  deep: SEABED_LINEAR,
   shallow: [0.2, 0.39, 0.53],
   sand: [0.78, 0.71, 0.53],
   grass: [0.34, 0.47, 0.22],
@@ -236,9 +292,14 @@ export function bakeSurface(w: World, pal: Palette = NATURAL): Surface {
       const light = (0.42 + 0.78 * lam) * (0.35 + 0.65 * ao[i])
       c = [c[0] * light, c[1] * light, c[2] * light]
     }
-    colors[i * 3] = clamp01(c[0])
-    colors[i * 3 + 1] = clamp01(c[1])
-    colors[i * 3 + 2] = clamp01(c[2])
+    // Posterise last, once the tint, sun and occlusion are all folded in, so the
+    // banding follows the light rather than cutting across it. Water included:
+    // the seabed plane is posterised the same way, and any difference would put
+    // the seam back.
+    const p = posterise(c)
+    colors[i * 3] = p[0]
+    colors[i * 3 + 1] = p[1]
+    colors[i * 3 + 2] = p[2]
   }
 
   return { colors, slope, ao, bands }

@@ -44,6 +44,10 @@
   height: 100%;
   touch-action: none;
   cursor: grab;
+  /* The engraving must stop at the neatline. Without this the map bleeds past
+     its own border to the edge of the sheet, and the frame reads as decoration
+     laid on top rather than as the edge of the plate. Matches .a-neatline. */
+  clip-path: inset(1.9%);
 }
 
 .a-plate.a-grabbing {

@@ -112,6 +112,11 @@ export function Root({ content, route, navigate }: ThemeProps) {
             >
               <line x1="0" y1="0" x2="0" y2="9" stroke="#2c2218" strokeWidth="0.55" opacity="0.4" />
             </pattern>
+            {/* the province border is an inland boundary — it must stop at the
+                coast rather than run out into the sea */}
+            <clipPath id="a-clipMain">
+              <path d={plate.coastPath} />
+            </clipPath>
           </defs>
 
           <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
@@ -207,7 +212,7 @@ export function Root({ content, route, navigate }: ThemeProps) {
                 strokeDasharray="9 6"
                 opacity="0.7"
                 vectorEffect="non-scaling-stroke"
-                clipPath="none"
+                clipPath="url(#a-clipMain)"
               />
               <path
                 d={plate.terra}
