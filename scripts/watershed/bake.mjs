@@ -21,6 +21,7 @@ import {
   fillDepressions,
   DEFAULTS,
 } from './erode.mjs'
+import { roadNetwork } from './roads.mjs'
 import { writePNG, packTerrain } from './png.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -444,6 +445,16 @@ if (!flag('preview-only')) {
   writePNG(join(OUT, 'surface.png'), SIZE, SIZE, surface, 4)
 
   // town sites and basin metadata the theme places content on
+  const sites = townSites(world, a, bas, 26, lake.depth)
+  // Roads are worn between the towns the same way everything else here is
+  // decided — by walking the terrain, not by drawing on it.
+  const gridSites = sites.map((p) => ({ x: p.x * SIZE, y: p.y * SIZE }))
+  const net = roadNetwork(world, gridSites, { seaLevel: SEA, lake: lake.depth })
+  console.log(
+    `  roads ${net.roads.length} between ${sites.length} towns` +
+      (net.unreachable ? ` · ${net.unreachable} unreachable` : ''),
+  )
+
   const meta = {
     size: SIZE,
     seaLevel: SEA,
@@ -451,7 +462,8 @@ if (!flag('preview-only')) {
     basins: bas.count,
     grainScale: +grainScale.toFixed(6),
     lakeScale: +lakeScale.toFixed(6),
-    sites: townSites(world, a, bas, 26, lake.depth),
+    sites,
+    roads: net.roads,
   }
   writeFileSync(join(OUT, 'world.json'), JSON.stringify(meta))
   console.log(`  wrote terrain.png + basin.png + world.json to ${OUT}`)

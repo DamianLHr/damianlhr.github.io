@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { Surface, World } from './world'
-import { forest, posterise, FRESH_LINEAR, SEABED_LINEAR, SEA_LINEAR } from './world'
+import { forest, posterise, FRESH_LINEAR, ROAD_LINEAR, SEABED_LINEAR, SEA_LINEAR } from './world'
 
 // landfall — the renderer (forked from watershed).
 //
@@ -300,12 +300,95 @@ export function createScene(
     }
   }
 
+  // --- roads -----------------------------------------------------------------
+  // The bake walked these: cheapest way between two towns over real ground,
+  // which is why they contour round the steep places and cross the rivers well
+  // upstream where a ford is cheap. Drawn as a ribbon that hugs the terrain —
+  // the polyline is re-densified to one point per cell first, or it would span
+  // the dips it was routed to avoid and float over them.
+  let roadMesh: THREE.Mesh | null = null
+  /** cells the roads run through, so the forest can leave them clear */
+  const roadMask = new Uint8Array(size * size)
+  {
+    const roads = world.meta.roads ?? []
+    const verts: number[] = []
+    const idx: number[] = []
+    const cell = PLANE / (size - 1)
+    const hAt = (gx: number, gy: number) => {
+      const x = Math.max(0, Math.min(size - 1, Math.round(gx)))
+      const y = Math.max(0, Math.min(size - 1, Math.round(gy)))
+      return world.height[y * size + x]
+    }
+    for (const road of roads) {
+      const dense: [number, number][] = []
+      for (let k = 0; k < road.points.length - 1; k++) {
+        const [ax, ay] = road.points[k]
+        const [bx, by] = road.points[k + 1]
+        const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay)))
+        for (let t = 0; t < steps; t++) {
+          dense.push([ax + ((bx - ax) * t) / steps, ay + ((by - ay) * t) / steps])
+        }
+      }
+      dense.push(road.points[road.points.length - 1])
+      if (dense.length < 2) continue
+
+      const base = verts.length / 3
+      for (let k = 0; k < dense.length; k++) {
+        const [gx, gy] = dense[k]
+        // clear a two-cell corridor either side
+        for (let dy = -2; dy <= 2; dy++) {
+          for (let dx = -2; dx <= 2; dx++) {
+            const mx = Math.round(gx) + dx
+            const my = Math.round(gy) + dy
+            if (mx < 0 || my < 0 || mx >= size || my >= size) continue
+            roadMask[my * size + mx] = 1
+          }
+        }
+        const prev = dense[Math.max(0, k - 1)]
+        const next = dense[Math.min(dense.length - 1, k + 1)]
+        let tx = next[0] - prev[0]
+        let ty = next[1] - prev[1]
+        const tl = Math.hypot(tx, ty) || 1
+        tx /= tl
+        ty /= tl
+        // perpendicular, half a road wide
+        const w2 = 0.9
+        const p = toWorld(gx - ty * w2, gy + tx * w2, hAt(gx - ty * w2, gy + tx * w2), size)
+        const q = toWorld(gx + ty * w2, gy - tx * w2, hAt(gx + ty * w2, gy - tx * w2), size)
+        // lift clear of the ground it follows
+        verts.push(p.x, p.y + cell * 0.16, p.z, q.x, q.y + cell * 0.16, q.z)
+        if (k > 0) {
+          const a = base + (k - 1) * 2
+          idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2)
+        }
+      }
+    }
+    if (idx.length) {
+      const geo = new THREE.BufferGeometry()
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3))
+      geo.setIndex(idx)
+      const mat = new THREE.MeshBasicMaterial({
+        color: linear(ROAD_LINEAR),
+        transparent: true,
+        opacity: 0.85,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -4,
+        polygonOffsetUnits: -4,
+        side: THREE.DoubleSide,
+      })
+      roadMesh = new THREE.Mesh(geo, mat)
+      roadMesh.renderOrder = 3
+      scene.add(roadMesh)
+    }
+  }
+
   // --- trees -----------------------------------------------------------------
   // The reference is *forested* — a near-continuous canopy with bare ground
   // showing through only where the slope is too steep to hold it. Scattered
   // trees on open grass was the wrong picture entirely, so this runs many more
   // of them and lets them close up into cover.
-  const trees = forest(world, surf, detail > 1 ? 12000 : 22000)
+  const trees = forest(world, surf, detail > 1 ? 12000 : 22000, 99, roadMask)
   let treeMesh: THREE.InstancedMesh | null = null
   if (trees.length > 0) {
     const cell = PLANE / (size - 1)
@@ -497,6 +580,8 @@ export function createScene(
       bedGeo.dispose()
       bedMat.dispose()
       lakeMesh?.geometry.dispose()
+      roadMesh?.geometry.dispose()
+      ;(roadMesh?.material as THREE.Material | undefined)?.dispose()
       treeMesh?.geometry.dispose()
       ;(treeMesh?.material as THREE.Material | undefined)?.dispose()
       renderer.dispose()

@@ -13,6 +13,8 @@ export interface WorldMeta {
   /** the run's own maxima, so surface.png decodes back to what was baked */
   grainScale?: number
   lakeScale?: number
+  /** least-cost walks between the towns, in grid coordinates */
+  roads?: { from: number; to: number; cost: number; points: [number, number][] }[]
   sites: { x: number; y: number; h: number; basin: number }[]
 }
 
@@ -131,6 +133,8 @@ export const SEABED_LINEAR: [number, number, number] = [0.015, 0.045, 0.095]
 export const SEA_LINEAR: [number, number, number] = [0.045, 0.13, 0.26]
 /** Rivers and lakes: the pale blue measured off the reference render. */
 export const FRESH_LINEAR: [number, number, number] = [0.185, 0.372, 0.604]
+/** Worn ground between the towns — dust, a shade lighter than what it crosses. */
+export const ROAD_LINEAR: [number, number, number] = [0.42, 0.35, 0.24]
 
 const toSRGB = (v: number) => (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055)
 const toLinear = (v: number) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4))
@@ -431,6 +435,8 @@ export function forest(
   surf: Surface,
   max: number,
   seed = 99,
+  /** cells nothing may grow on — the road corridors */
+  blocked?: Uint8Array,
 ): { x: number; y: number; h: number; scale: number }[] {
   const s = w.size
   const out: { x: number; y: number; h: number; scale: number }[] = []
@@ -450,6 +456,9 @@ export function forest(
     if (hv < w.seaLevel + 0.012 || hv > upper) continue
     if (surf.slope[i] > slopeCap * 0.02) continue
     if (w.discharge[i] > 0.22) continue
+    // A road through unbroken canopy is invisible from above. Clearing a
+    // corridor is both what actually happens and what lets the network read.
+    if (blocked && blocked[i]) continue
     const x = i % s
     const y = (i / s) | 0
     // denser in sheltered ground, thinner on exposed shoulders
