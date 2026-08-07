@@ -1,13 +1,22 @@
 import '@fontsource/space-grotesk/400.css'
 import '@fontsource/space-grotesk/500.css'
 import '@fontsource/space-grotesk/700.css'
-import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from 'react'
 import * as THREE from 'three'
 import type { ThemeProps } from '../../shared/theme-contract'
 import type { Project, SiteContent } from '../../content/types'
 import { routePath, TOP_LEVEL_ROUTES } from '../../shared/routes'
 import { bakeSurface, loadWorld, type Surface, type World } from './world'
 import { createScene, HEIGHT, PLANE, type Scene } from './scene'
+import { drawRelief, reliefPoint } from './relief2d'
 import './watershed.css'
 
 // watershed — the CV as an eroded island (PLAN Phase 6).
@@ -69,13 +78,22 @@ function Link({
   )
 }
 
+const KEYS_SEEN = 'ws:keys-seen'
+
 export function Root({ content, route, navigate }: ThemeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const flatRef = useRef<HTMLCanvasElement>(null)
   const sceneRef = useRef<Scene | null>(null)
   const [world, setWorld] = useState<{ world: World; surf: Surface } | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
   const [ready, setReady] = useState(false)
+  /** no WebGL 2, or the context went away — the island falls back to flat relief */
+  const [flat, setFlat] = useState(false)
   const [stats, setStats] = useState({ fps: 0, tris: 0, detail: 1 })
+  /** which place the keyboard is standing on, and what to read out about it */
+  const [cursor, setCursor] = useState(-1)
+  const [announce, setAnnounce] = useState('')
+  const [showKeys, setShowKeys] = useState(false)
   const showHud = new URLSearchParams(window.location.search).has('hud')
   const path = routePath(route)
   const home = route.kind === 'home'
@@ -115,18 +133,59 @@ export function Root({ content, route, navigate }: ThemeProps) {
       reducedMotion: reduced,
     })
     if (!s) {
-      setFailed('This device could not start WebGL.')
+      // Not a dead end. The same island is drawn flat from the same baked
+      // colours, and every route, panel and place still works.
+      setFlat(true)
       return
     }
     sceneRef.current = s
     s.setAutoRotate(true)
     setReady(true)
+    // A lost context used to leave a frozen canvas and no way forward.
+    const onLost = (e: Event) => {
+      e.preventDefault()
+      sceneRef.current = null
+      setReady(false)
+      setFlat(true)
+    }
+    canvas.addEventListener('webglcontextlost', onLost)
     return () => {
+      canvas.removeEventListener('webglcontextlost', onLost)
       s.dispose()
       sceneRef.current = null
       setReady(false)
     }
   }, [world])
+
+  // --- flat fallback: the island from above, no GL ---
+  useEffect(() => {
+    if (!flat || !world) return
+    const canvas = flatRef.current
+    if (!canvas) return
+    const paint = () => {
+      const rect = canvas.getBoundingClientRect()
+      const dpr = Math.min(2, window.devicePixelRatio || 1)
+      canvas.width = Math.max(1, Math.round(rect.width * dpr))
+      canvas.height = Math.max(1, Math.round(rect.height * dpr))
+      drawRelief(canvas, world.world, world.surf)
+      // markers sit on the map by grid position rather than by projection
+      for (const [id, el] of markerRefs.current) {
+        const p = layout?.places.find((q) => q.id === id)
+        if (!p) {
+          el.style.opacity = '0'
+          continue
+        }
+        const at = reliefPoint(canvas, world.world.size, p.gx, p.gy)
+        el.style.transform = `translate(${at.x / dpr}px, ${at.y / dpr}px) translate(-50%,-120%)`
+        el.style.opacity = '1'
+        el.style.pointerEvents = 'auto'
+      }
+    }
+    paint()
+    const ro = new ResizeObserver(paint)
+    ro.observe(canvas)
+    return () => ro.disconnect()
+  }, [flat, world, layout, cursor])
 
   // --- markers projected to screen every frame ---
   const markerRefs = useRef(new Map<string, HTMLElement>())
@@ -157,7 +216,10 @@ export function Root({ content, route, navigate }: ThemeProps) {
           out.x < panel.right + 8 &&
           out.y > panel.top - 8 &&
           out.y < panel.bottom + 8
-        const show = out.visible && !hidden
+        // never hide the place the keyboard is standing on: focus must not land
+        // on something invisible
+        const here = el.classList.contains('ws-here')
+        const show = here || (out.visible && !hidden)
         el.style.transform = `translate(${out.x}px, ${out.y}px) translate(-50%,-120%)`
         el.style.opacity = show ? '1' : '0'
         el.style.pointerEvents = show ? 'auto' : 'none'
@@ -182,6 +244,90 @@ export function Root({ content, route, navigate }: ThemeProps) {
     mounted.current = true
   }, [route, ready, layout])
 
+  // --- travelling the island by keyboard ---
+  //
+  // A map is hostile to anyone who cannot see it, and the places on this one
+  // were markers with a click handler: unreachable by tab, unannounced, and
+  // therefore not really content at all. The places are now one roving tab stop
+  // — arrows walk the island, Enter opens what is there, and the camera sails to
+  // whatever the cursor lands on, so a sighted keyboard user follows the same
+  // journey a mouse would take.
+  const places = layout?.places ?? []
+  const placeAt = (i: number) => places[((i % places.length) + places.length) % places.length]
+
+  const describe = (p: Place) => {
+    const kind =
+      p.kind === 'school'
+        ? 'place of study'
+        : p.kind === 'work'
+          ? 'workplace'
+          : p.kind === 'project'
+            ? 'project'
+            : 'interest'
+    const region = layout?.regions.find((r) => r.basin === p.basin)
+    const where = region ? ` in ${region.label.toLowerCase()}` : ' on the coast'
+    const note = p.note ? `. ${p.note}` : ''
+    return `${p.label}, ${kind}${where}${note}${p.slug ? '. Press Enter to open.' : ''}`
+  }
+
+  const goTo = (i: number) => {
+    if (!places.length) return
+    const next = ((i % places.length) + places.length) % places.length
+    setCursor(next)
+    const p = places[next]
+    setAnnounce(describe(p))
+    // A roving tab stop only works if focus actually moves with the cursor,
+    // otherwise the arrows shuffle a highlight while the screen reader stays
+    // parked on whatever was tabbed to first.
+    markerRefs.current.get(p.id)?.focus()
+    const s = sceneRef.current
+    if (s) s.flyTo(s.worldPointAt(p.gx, p.gy, p.h), PLANE * 0.34)
+  }
+
+  const onMapKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!places.length) return
+    const k = e.key
+    if (k === 'ArrowRight' || k === 'ArrowDown' || k === ']') {
+      e.preventDefault()
+      goTo(cursor + 1)
+    } else if (k === 'ArrowLeft' || k === 'ArrowUp' || k === '[') {
+      e.preventDefault()
+      goTo(cursor - 1)
+    } else if (k === 'Home') {
+      e.preventDefault()
+      goTo(0)
+    } else if (k === 'End') {
+      e.preventDefault()
+      goTo(places.length - 1)
+    } else if (k === 'Enter' || k === ' ') {
+      const p = placeAt(cursor)
+      if (cursor >= 0 && p?.slug) {
+        e.preventDefault()
+        navigate(`/projects/${p.slug}`)
+      }
+    } else if (k === '?' || (k === '/' && e.shiftKey)) {
+      e.preventDefault()
+      setShowKeys(true)
+    } else if (k === 'Escape') {
+      setCursor(-1)
+      setAnnounce('Left the island map.')
+    }
+  }
+
+  // The first time someone arrives here by keyboard, say what the keys are —
+  // controls nobody can discover are the same as no controls.
+  const onMapFocus = () => {
+    if (cursor < 0 && places.length) goTo(0)
+    try {
+      if (!localStorage.getItem(KEYS_SEEN)) {
+        setShowKeys(true)
+        localStorage.setItem(KEYS_SEEN, '1')
+      }
+    } catch {
+      /* private mode: showing the hint every time is the harmless side */
+    }
+  }
+
   useEffect(() => {
     if (!ready || !showHud) return
     const t = window.setInterval(() => {
@@ -193,7 +339,8 @@ export function Root({ content, route, navigate }: ThemeProps) {
 
   return (
     <div className="ws">
-      <canvas ref={canvasRef} className="ws-canvas" />
+      {!flat && <canvas ref={canvasRef} className="ws-canvas" />}
+      {flat && <canvas ref={flatRef} className="ws-canvas ws-flat" aria-hidden="true" />}
 
       {!world && !failed && (
         <div className="ws-boot">
@@ -207,11 +354,19 @@ export function Root({ content, route, navigate }: ThemeProps) {
         </div>
       )}
 
-      <div className="ws-markers" aria-hidden="true">
+      <div
+        className="ws-markers"
+        role="group"
+        aria-label="Places on the island — use the arrow keys to travel between them"
+        onKeyDown={onMapKeyDown}
+        onFocus={onMapFocus}
+      >
+        {/* province lettering is scenery: it repeats what the places already say */}
         {layout?.regions.map((r) => (
           <span
             key={`reg:${r.label}`}
             className="ws-region"
+            aria-hidden="true"
             ref={(el) => {
               if (el) markerRefs.current.set(`reg:${r.label}`, el)
               else markerRefs.current.delete(`reg:${r.label}`)
@@ -220,22 +375,38 @@ export function Root({ content, route, navigate }: ThemeProps) {
             {r.label}
           </span>
         ))}
-        {layout?.places.map((p) => (
-          <span
+        {layout?.places.map((p, i) => (
+          <button
             key={p.id}
-            className={`ws-place ws-place-${p.kind}`}
+            type="button"
+            className={`ws-place ws-place-${p.kind}${i === cursor ? ' ws-here' : ''}`}
+            // one tab stop for the whole island; the arrows do the walking
+            tabIndex={i === cursor || (cursor < 0 && i === 0) ? 0 : -1}
+            aria-current={i === cursor ? 'true' : undefined}
             ref={(el) => {
               if (el) markerRefs.current.set(p.id, el)
               else markerRefs.current.delete(p.id)
             }}
-            onClick={p.slug ? () => navigate(`/projects/${p.slug}`) : undefined}
-            role={p.slug ? 'link' : undefined}
+            onFocus={() => {
+              if (i !== cursor) goTo(i)
+            }}
+            onClick={() => {
+              setCursor(i)
+              if (p.slug) navigate(`/projects/${p.slug}`)
+              else goTo(i)
+            }}
           >
-            <i />
+            <i aria-hidden="true" />
             {p.label}
-          </span>
+            <span className="ws-sr">{` — ${describe(p)}`}</span>
+          </button>
         ))}
       </div>
+
+      {/* what the arrows just did, for anyone not watching the camera */}
+      <p className="ws-sr" role="status" aria-live="polite">
+        {announce}
+      </p>
 
       <header className="ws-nav">
         <Link to="/" navigate={navigate} className="ws-mark">
@@ -269,11 +440,104 @@ export function Root({ content, route, navigate }: ThemeProps) {
         </section>
       )}
 
+      <button type="button" className="ws-keys-open" onClick={() => setShowKeys(true)}>
+        Keyboard controls
+      </button>
+      {showKeys && <KeyGuide onClose={() => setShowKeys(false)} flat={flat} />}
+
       {showHud && (
         <aside className="ws-hud">
           {stats.fps} fps · {(stats.tris / 1000).toFixed(0)}k tris · detail {stats.detail}
         </aside>
       )}
+    </div>
+  )
+}
+
+/**
+ * How to travel the island without a mouse.
+ *
+ * Shown the first time the map takes keyboard focus, and reachable afterwards
+ * from a button that is always in the tab order — a control nobody can find is
+ * the same as no control.
+ */
+function KeyGuide({ onClose, flat }: { onClose: () => void; flat: boolean }) {
+  const closeRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    closeRef.current?.focus()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div className="ws-keys-back" onClick={onClose}>
+      <div
+        className="ws-keys"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ws-keys-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 id="ws-keys-title">Travelling the island</h2>
+        <p className="ws-dim">
+          The island is a map of the CV: schools, workplaces, projects and interests each sit in a
+          real place on it. Everything here is reachable without a mouse.
+        </p>
+        <dl className="ws-keys-list">
+          <div>
+            <dt>
+              <kbd>Tab</kbd>
+            </dt>
+            <dd>step onto the island</dd>
+          </div>
+          <div>
+            <dt>
+              <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd>
+            </dt>
+            <dd>travel to the next place; the camera sails with you</dd>
+          </div>
+          <div>
+            <dt>
+              <kbd>Enter</kbd>
+            </dt>
+            <dd>open the project you are standing on</dd>
+          </div>
+          <div>
+            <dt>
+              <kbd>Home</kbd> <kbd>End</kbd>
+            </dt>
+            <dd>first and last place</dd>
+          </div>
+          <div>
+            <dt>
+              <kbd>Esc</kbd>
+            </dt>
+            <dd>leave the map</dd>
+          </div>
+          <div>
+            <dt>
+              <kbd>?</kbd>
+            </dt>
+            <dd>bring this back</dd>
+          </div>
+        </dl>
+        {flat && (
+          <p className="ws-dim">
+            This device is drawing the island flat, from above — the 3D view needs WebGL 2. Every
+            place, route and page works exactly the same.
+          </p>
+        )}
+        <p className="ws-dim">
+          Prefer to read rather than travel? The CV, projects and interests pages hold the same
+          content as plain text.
+        </p>
+        <button type="button" ref={closeRef} className="ws-keys-close" onClick={onClose}>
+          Close
+        </button>
+      </div>
     </div>
   )
 }

@@ -310,7 +310,28 @@ still stashed.*
 - [ ] Honest limit: sinuosity 1.24 is "sinuous", with reaches to 1.36. Textbook
       meandering is >1.5 and wants a flatter, wetter world than an island with
       mountains on it — the remaining lever is the landform, not the erosion.
-- [ ] Open: a11y/keyboard route to towns + non-WebGL fallback; perf soak; whether
+- [x] **Gate blockers cleared 2026-08-07.** *(a) Keyboard travel:* the places were
+      markers with a click handler — unreachable by tab, unannounced, and so not
+      really content at all. They are now real buttons on one roving tab stop;
+      arrows walk the island, Enter opens a project, Home/End jump to the ends,
+      Esc leaves, and the camera sails to whatever the cursor lands on so a
+      sighted keyboard user takes the same journey a mouse would. Each button's
+      accessible name carries its own description ("Kill Bunny, project in the
+      working basin"), so a screen reader announces it on focus without
+      depending on the live region. *(b) A tutorial*, because controls nobody can
+      discover are the same as no controls: a key guide opens the first time the
+      map takes keyboard focus, and a "Keyboard controls" button sits in the tab
+      order permanently. *(c) Non-WebGL fallback:* `relief2d.ts` paints the same
+      island from above from the same baked colours — no GL, no mesh. It is what
+      a device without WebGL 2 gets *and* what everyone gets if the context is
+      lost mid-session, which used to leave a frozen canvas. Verified by forcing
+      a real context loss: flat map paints, all 13 places, panels and nav
+      survive. *(d) Perf soak:* 3600 frames across 30 route flights — scene
+      object count constant at 6, heap 56→63 MB, no accumulation.
+- [ ] Still unverified: frame rate on real hardware. The preview pane does not
+      composite, so every fps figure measurable here is meaningless, and the
+      forest went 5200 → 22000 in the reference-match pass.
+- [ ] Open: whether
       `coming-soon` projects should get a town at all (only released projects are
       placed, so those two pages fly to the island overview instead of a place);
       whether true high-sinuosity meanders are worth chasing (momentum coupling
