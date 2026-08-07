@@ -225,7 +225,93 @@ export function createScene(
   seabed.position.y = floor * HEIGHT
   scene.add(seabed)
 
-  const seaGeo = new THREE.PlaneGeometry(PLANE * 24, PLANE * 24)
+  /**
+   * The sea surface, tessellated where it matters.
+   *
+   * A uniform grid fine enough to carry a wave near the shore would need
+   * millions of quads to also reach the horizon. Warping a uniform grid through
+   * a power curve puts fractions of a unit between vertices over the island and
+   * tens of units out at the rim — one continuous surface, no seam between a
+   * detailed near sea and a flat far one, and the swell simply runs out of
+   * resolution exactly where it is already too far away to read.
+   */
+  const seaGeo = (() => {
+    const N = 320
+    const half = PLANE * 12
+    // Linear out to `near`, then expanding hard to the horizon. A plain power
+    // curve crams the resolution into the middle of the *map*, which is the
+    // middle of the island — dry land — and leaves the coastline itself coarse
+    // enough to show a comb of triangles against the sand.
+    const near = PLANE * 1.5
+    const warp = (t: number) => {
+      const a = Math.abs(t)
+      return Math.sign(t) * (a * near + Math.pow(a, 5) * (half - near))
+    }
+    const pos = new Float32Array((N + 1) * (N + 1) * 3)
+    const idx = new Uint32Array(N * N * 6)
+    let p = 0
+    for (let j = 0; j <= N; j++) {
+      for (let i = 0; i <= N; i++) {
+        pos[p++] = warp((i / N) * 2 - 1)
+        pos[p++] = warp((j / N) * 2 - 1)
+        pos[p++] = 0
+      }
+    }
+    let k = 0
+    for (let j = 0; j < N; j++) {
+      for (let i = 0; i < N; i++) {
+        const a = j * (N + 1) + i
+        const b = a + 1
+        const c = a + N + 1
+        const d = c + 1
+        idx[k++] = a
+        idx[k++] = c
+        idx[k++] = b
+        idx[k++] = b
+        idx[k++] = c
+        idx[k++] = d
+      }
+    }
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    g.setIndex(new THREE.BufferAttribute(idx, 1))
+    return g
+  })()
+
+  // The heightfield, handed to the GPU so the water knows where the land is.
+  // That is what lets the surf break on the actual coastline rather than being
+  // drawn as a ring somebody guessed at.
+  // RGBA rather than a single red channel: a one-channel data texture is the
+  // kind of thing that silently samples as zero on some drivers, and a zero here
+  // does not look broken — it just puts the coastline at infinite depth, so the
+  // surf never appears and the swell runs at full height into the sand.
+  const depthData = new Uint8Array(size * size * 4)
+  for (let i = 0; i < size * size; i++) {
+    const h = Math.round(Math.min(1, Math.max(0, world.height[i])) * 255)
+    depthData[i * 4] = h
+    depthData[i * 4 + 1] = h
+    depthData[i * 4 + 2] = h
+    depthData[i * 4 + 3] = 255
+  }
+  const depthTex = new THREE.DataTexture(depthData, size, size, THREE.RGBAFormat)
+  depthTex.needsUpdate = true
+  depthTex.minFilter = THREE.LinearFilter
+  depthTex.magFilter = THREE.LinearFilter
+  depthTex.wrapS = THREE.ClampToEdgeWrapping
+  depthTex.wrapT = THREE.ClampToEdgeWrapping
+
+  const crest = linear([0.3, 0.52, 0.72])
+  const foamCol = linear([0.86, 0.93, 0.97])
+  const seaUniforms = {
+    uTime: { value: 0 },
+    uHeight: { value: depthTex },
+    uSea: { value: world.seaLevel },
+    uPlane: { value: PLANE },
+    uAmp: { value: HEIGHT * 0.03 },
+    uCrest: { value: crest },
+    uFoam: { value: foamCol },
+  }
+
   const seaMat = new THREE.MeshBasicMaterial({
     color: linear(SEA_LINEAR),
     transparent: true,
@@ -238,10 +324,92 @@ export function createScene(
     polygonOffsetFactor: -2,
     polygonOffsetUnits: -2,
   })
+  /** dev: the compiled sea shader, so a headless check can read what it became */
+  const seaShaderRef: { current: unknown } = { current: null }
+  seaMat.onBeforeCompile = (shader) => {
+    if (import.meta.env.DEV) seaShaderRef.current = shader
+    Object.assign(shader.uniforms, seaUniforms)
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+         uniform float uTime;
+         uniform sampler2D uHeight;
+         uniform float uSea;
+         uniform float uPlane;
+         uniform float uAmp;
+         varying float vWave;
+         varying vec2 vXZ;
+         // three crossing swells rather than one, so the surface never reads as
+         // a single repeating corrugation
+         float swell(vec2 p, float t) {
+           float w = sin(dot(p, vec2(0.82, -0.57)) * 0.20 + t * 1.10) * 0.55;
+           w += sin(dot(p, vec2(0.31, 0.95)) * 0.33 + t * 1.55) * 0.30;
+           w += sin(dot(p, vec2(-0.70, 0.71)) * 0.67 + t * 2.10) * 0.15;
+           return w;
+         }`,
+      )
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+         vec4 wp = modelMatrix * vec4(transformed, 1.0);
+         vXZ = wp.xz;
+         vec2 tuv = wp.xz / uPlane + 0.5;
+         float land = 0.0;
+         if (tuv.x > 0.0 && tuv.x < 1.0 && tuv.y > 0.0 && tuv.y < 1.0) {
+           land = texture2D(uHeight, tuv).r;
+         }
+         float depth = uSea - land;
+         // flatten into the beach, or the swell saws through the sand
+         float shoal = smoothstep(0.0, 0.05, depth);
+         // and fade out long before the grid runs coarse
+         float reach = 1.0 - smoothstep(uPlane * 1.2, uPlane * 4.0, length(wp.xz));
+         vWave = swell(wp.xz, uTime) * shoal * reach;
+         // the plane is rotated flat, so local +Z is world up
+         transformed.z += vWave * uAmp;`,
+      )
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+         uniform float uTime;
+         uniform sampler2D uHeight;
+         uniform float uSea;
+         uniform float uPlane;
+         uniform vec3 uCrest;
+         uniform vec3 uFoam;
+         varying float vWave;
+         varying vec2 vXZ;`,
+      )
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+         // band the swell rather than shading it smoothly — the land is
+         // posterised and a smooth ocean beside it looks like a different render
+         float band = floor(clamp(vWave * 0.6 + 0.5, 0.0, 1.0) * 4.0) / 4.0;
+         diffuseColor.rgb = mix(diffuseColor.rgb, uCrest, band * 0.55);
+
+         vec2 tuv = vXZ / uPlane + 0.5;
+         float land = 0.0;
+         if (tuv.x > 0.0 && tuv.x < 1.0 && tuv.y > 0.0 && tuv.y < 1.0) {
+           land = texture2D(uHeight, tuv).r;
+         }
+         float depth = uSea - land;
+         // surf: bands of foam running up the shallows and breaking at the sand
+         float shore = 1.0 - smoothstep(0.0, 0.085, depth);
+         float roll = sin(depth * 150.0 - uTime * 2.6) * 0.5 + 0.5;
+         float foam = shore * smoothstep(0.35, 0.7, roll);
+         float wash = shore * shore * 0.5;
+         diffuseColor.rgb = mix(diffuseColor.rgb, uFoam, clamp(foam * 0.9 + wash, 0.0, 1.0));
+         diffuseColor.a = mix(diffuseColor.a, 0.97, foam);`,
+      )
+  }
+
   const sea = new THREE.Mesh(seaGeo, seaMat)
   sea.rotation.x = -Math.PI / 2
   sea.position.y = world.seaLevel * HEIGHT
   sea.renderOrder = 1
+  sea.frustumCulled = false
   scene.add(sea)
 
   // --- lakes -----------------------------------------------------------------
@@ -648,6 +816,7 @@ export function createScene(
     const floorY = groundAt(camera.position.x, camera.position.z) + CLEARANCE
     if (camera.position.y < floorY) camera.position.y = floorY
 
+    seaUniforms.uTime.value = now * 0.001
     sky.update(dt, now)
 
     // Boats work their way round the island, rolling a little as they go. The
@@ -688,6 +857,8 @@ export function createScene(
       controls,
       terrain,
       sea,
+      seaUniforms,
+      seaShaderRef,
       seabed,
       skydome,
       get trees() {
@@ -747,6 +918,7 @@ export function createScene(
       terrainMat.dispose()
       seaGeo.dispose()
       seaMat.dispose()
+      depthTex.dispose()
       bedGeo.dispose()
       bedMat.dispose()
       sky.dispose()
