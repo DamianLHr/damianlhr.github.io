@@ -378,11 +378,14 @@ export function createScene(
          // flatten into the beach, or the swell saws through the sand
          float shoal = smoothstep(0.0, 0.05, depth);
          // and fade out long before the grid runs coarse
-         float reach = 1.0 - smoothstep(uPlane * 4.0, uPlane * 9.0, length(wp.xz));
+         // Calm in the true distance. Carrying the swell all the way out made
+         // the whole ocean restless; the water that reads is the water near the
+         // island, and the horizon is better left quiet.
+         float reach = 1.0 - smoothstep(uPlane * 1.8, uPlane * 4.5, length(wp.xz));
          vWave = swell(wp.xz, uTime) * shoal * reach;
          // whitecaps only where the grid is fine enough to carry them; further
          // out the crests alias across huge triangles and read as static litter
-         vNear = 1.0 - smoothstep(uPlane * 3.0, uPlane * 7.0, length(wp.xz));
+         vNear = 1.0 - smoothstep(uPlane * 1.4, uPlane * 4.0, length(wp.xz));
          // the plane is rotated flat, so local +Z is world up
          transformed.z += vWave * uAmp;`,
       )

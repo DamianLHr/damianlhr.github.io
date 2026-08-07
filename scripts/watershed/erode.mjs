@@ -154,8 +154,7 @@ export function createWorld({
     height[i] =
       t < PLAIN_SPLIT
         ? Math.pow(t / PLAIN_SPLIT, 1.25) * PLAIN_HEIGHT
-        : PLAIN_HEIGHT +
-          Math.pow((t - PLAIN_SPLIT) / (1 - PLAIN_SPLIT), 1.35) * (1 - PLAIN_HEIGHT)
+        : PLAIN_HEIGHT + Math.pow((t - PLAIN_SPLIT) / (1 - PLAIN_SPLIT), 1.35) * (1 - PLAIN_HEIGHT)
   }
 
   // Calibrate against the distribution rather than trusting a magic constant:
@@ -751,6 +750,66 @@ export function wind(w, { particles = 9000, seed = 21, params = {} } = {}) {
 }
 
 /**
+ * Take the open sea down to real depth, leaving only the island's own shelf.
+ *
+ * The renderer decides where waves break from how deep the water is, so *any*
+ * shallow ground offshore breaks surf on it — and the map is littered with
+ * drowned islets and shoals, both the ones the erosion left and the ones
+ * `pruneIslands` sank. Every one of them grew its own ring of foam out in open
+ * water, which reads as a reef that is not there.
+ *
+ * Distance from land is measured by a flood fill, so the shelf that survives is
+ * the one actually attached to the coast. Beyond it the floor ramps down past
+ * anything the surf can see.
+ */
+export function deepenOffshore(w, seaLevel, { shelf = 10, ramp = 14, floor = 0.3 } = {}) {
+  const s = w.size
+  const n = s * s
+  const dist = new Int32Array(n).fill(-1)
+  const queue = new Int32Array(n)
+  let head = 0
+  let tail = 0
+  for (let i = 0; i < n; i++) {
+    if (w.height[i] >= seaLevel) {
+      dist[i] = 0
+      queue[tail++] = i
+    }
+  }
+  while (head < tail) {
+    const i = queue[head++]
+    const x = i % s
+    const y = (i / s) | 0
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue
+        const nx = x + dx
+        const ny = y + dy
+        if (nx < 0 || ny < 0 || nx >= s || ny >= s) continue
+        const j = ny * s + nx
+        if (dist[j] !== -1) continue
+        dist[j] = dist[i] + 1
+        queue[tail++] = j
+      }
+    }
+  }
+
+  let deepened = 0
+  const target = seaLevel - floor
+  for (let i = 0; i < n; i++) {
+    if (dist[i] <= shelf) continue
+    const t = Math.min(1, (dist[i] - shelf) / ramp)
+    // ease so the shelf runs out into deep water instead of stepping off it
+    const k = t * t * (3 - 2 * t)
+    const want = w.height[i] + (target - w.height[i]) * k
+    if (want < w.height[i]) {
+      w.height[i] = want
+      deepened++
+    }
+  }
+  return { deepened }
+}
+
+/**
  * Standing water on the land: the depth between the terrain and the level its
  * depression fills to before spilling. This is the cheap, deterministic cousin
  * of the flood step in nickmcd.me/2020/04/15/procedural-hydrology — we already
@@ -1062,7 +1121,8 @@ export function basins(w, seaLevel, minCells = 400, surface) {
 
   // count and keep only basins worth naming
   const counts = new Map()
-  for (let i = 0; i < n; i++) if (label[i] >= 0) counts.set(label[i], (counts.get(label[i]) ?? 0) + 1)
+  for (let i = 0; i < n; i++)
+    if (label[i] >= 0) counts.set(label[i], (counts.get(label[i]) ?? 0) + 1)
   const big = [...counts.entries()].filter(([, c]) => c >= minCells).sort((a, b) => b[1] - a[1])
   const remap = new Map(big.map(([id], k) => [id, k]))
   for (let i = 0; i < n; i++) label[i] = label[i] >= 0 ? (remap.get(label[i]) ?? -1) : -1

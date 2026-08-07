@@ -15,6 +15,7 @@ import {
   wind,
   lakes,
   pruneIslands,
+  deepenOffshore,
   topMaterial,
   basins,
   flowField,
@@ -400,6 +401,8 @@ const blown = wind(world, {
 
 // Erosion calves off new specks of its own — cut them too.
 const prunedAfter = pruneIslands(world, SEA)
+// and take the open sea down, so no drowned shoal breaks surf out in deep water
+const deepened = deepenOffshore(world, SEA)
 const simMs = Date.now() - t0
 
 const a = analyse(world)
@@ -444,7 +447,7 @@ console.log(
     `  land ${((landCells / (SIZE * SIZE)) * 100).toFixed(1)}% · rivers ${((riverCells / landCells) * 100).toFixed(1)}% of land`,
     `  drains to sea ${((reachSea / landCells) * 100).toFixed(1)}% · basins ${bas.count}`,
     `  max height ${maxH.toFixed(3)} · max discharge ${a.maxD.toFixed(1)}`,
-    `  islands ${prunedBefore.components}→${prunedBefore.kept} before, ${prunedAfter.components}→${prunedAfter.kept} after (${prunedBefore.sunk + prunedAfter.sunk} cells sunk)`,
+    `  islands ${prunedBefore.components}→${prunedBefore.kept} before, ${prunedAfter.components}→${prunedAfter.kept} after (${prunedBefore.sunk + prunedAfter.sunk} cells sunk) · ${deepened.deepened} sea cells taken deep`,
     `  surface: rock ${pct(grades.rock)} · gravel ${pct(grades.gravel)} · sand ${pct(grades.sand)} · silt ${pct(grades.silt)} · wind moved ${blown.moved.toFixed(2)}`,
     `  lakes ${lake.cells} cells (${((lake.cells / landCells) * 100).toFixed(1)}% of land) · deepest ${maxLake.toFixed(3)}`,
   ].join('\n'),

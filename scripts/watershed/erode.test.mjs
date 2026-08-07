@@ -6,6 +6,7 @@ import {
   lakes,
   loose,
   pruneIslands,
+  deepenOffshore,
   fillDepressions,
   flowField,
   basins,
@@ -18,8 +19,7 @@ import {
 // separate a landscape from a mess.
 
 const SEA = DEFAULTS.seaLevel
-const small = () =>
-  createWorld({ size: 96, seed: 3, seaLevel: SEA, landFraction: 0.44 })
+const small = () => createWorld({ size: 96, seed: 3, seaLevel: SEA, landFraction: 0.44 })
 
 function run(w, steps = 200, params = {}) {
   return erode(w, { steps, dropsPerStep: 60, seed: 11, params })
@@ -256,6 +256,51 @@ describe('islands', () => {
       if (x < frame || y < frame || x >= s - frame || y >= s - frame) {
         expect(w.height[i]).toBeLessThan(SEA)
       }
+    }
+  })
+})
+
+describe('open sea', () => {
+  it('leaves no shallow ground away from the coast', () => {
+    // The renderer breaks surf wherever the water is shallow, so a drowned
+    // islet out in open water grows a ring of foam on a reef that is not there.
+    const w = small()
+    run(w, 200)
+    pruneIslands(w, SEA)
+    const shelf = 10
+    const { deepened } = deepenOffshore(w, SEA, { shelf, ramp: 14, floor: 0.3 })
+    expect(deepened).toBeGreaterThan(0)
+
+    // distance from land, the same way the deepening measures it
+    const s = w.size
+    const n = s * s
+    const dist = new Int32Array(n).fill(-1)
+    const q = []
+    for (let i = 0; i < n; i++) {
+      if (w.height[i] < SEA) continue
+      dist[i] = 0
+      q.push(i)
+    }
+    for (let h = 0; h < q.length; h++) {
+      const i = q[h]
+      const x = i % s
+      const y = (i / s) | 0
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx
+          const ny = y + dy
+          if (nx < 0 || ny < 0 || nx >= s || ny >= s) continue
+          const j = ny * s + nx
+          if (dist[j] !== -1) continue
+          dist[j] = dist[i] + 1
+          q.push(j)
+        }
+      }
+    }
+    // well beyond the shelf and its ramp, nothing may still be surf-shallow
+    for (let i = 0; i < n; i++) {
+      if (dist[i] <= shelf + 16) continue
+      expect(SEA - w.height[i]).toBeGreaterThan(0.12)
     }
   })
 })
