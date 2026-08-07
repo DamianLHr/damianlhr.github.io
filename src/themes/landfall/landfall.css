@@ -70,28 +70,65 @@
 
 /* --- keyboard travel ------------------------------------------------------ */
 
+/* Sits in the nav row with the section links, sharing their type and colour so
+   the chrome stays one thing. Quieter than a link, because it is a utility and
+   not a destination. */
+.lf-nav-right {
+  display: flex;
+  align-items: center;
+  gap: clamp(0.9rem, 2.6vw, 1.8rem);
+}
+
 .lf-keys-open {
-  position: fixed;
-  left: 1rem;
-  bottom: 1rem;
-  z-index: 6;
-  padding: 0.35rem 0.7rem;
-  border-radius: 999px;
-  border: 1px solid rgba(16, 22, 28, 0.18);
-  background: var(--lf-glass);
-  color: var(--lf-ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0;
+  border: 0;
+  background: none;
+  color: var(--lf-paper);
   font: inherit;
-  font-size: 0.68rem;
-  letter-spacing: 0.06em;
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 10px rgba(8, 16, 22, 0.8);
   cursor: pointer;
-  backdrop-filter: blur(3px);
-  opacity: 0.55;
-  transition: opacity 160ms var(--lf-ease);
+  opacity: 0.62;
+  transition: opacity 180ms var(--lf-ease);
+}
+
+.lf-keys-open kbd {
+  display: inline-grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+  font-size: 0.66rem;
+  line-height: 1;
+  opacity: 0.9;
 }
 
 .lf-keys-open:hover,
 .lf-keys-open:focus-visible {
   opacity: 1;
+}
+
+.lf-keys-open:focus-visible {
+  outline: 2px solid var(--lf-paper);
+  outline-offset: 3px;
+}
+
+/* On a narrow screen the label goes and the key stands alone — the nav row has
+   no width to spare there. */
+@media (max-width: 700px) {
+  .lf-keys-open span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
 }
 
 .lf-keys-back {
@@ -178,15 +215,6 @@
 .lf-flat {
   image-rendering: crisp-edges;
   image-rendering: pixelated;
-}
-
-@media (max-width: 900px) {
-  .lf-keys-open {
-    bottom: auto;
-    top: 0.7rem;
-    left: auto;
-    right: 0.8rem;
-  }
 }
 
 .lf-markers > * {

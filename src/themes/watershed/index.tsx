@@ -284,35 +284,69 @@ export function Root({ content, route, navigate }: ThemeProps) {
     if (s) s.flyTo(s.worldPointAt(p.gx, p.gy, p.h), PLANE * 0.34)
   }
 
-  const onMapKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (!places.length) return
-    const k = e.key
+  /** Returns true when the key was one of ours and has been dealt with. */
+  const travelKey = (k: string, preventDefault: () => void) => {
+    if (!places.length) return false
     if (k === 'ArrowRight' || k === 'ArrowDown' || k === ']') {
-      e.preventDefault()
+      preventDefault()
       goTo(cursor + 1)
     } else if (k === 'ArrowLeft' || k === 'ArrowUp' || k === '[') {
-      e.preventDefault()
+      preventDefault()
       goTo(cursor - 1)
     } else if (k === 'Home') {
-      e.preventDefault()
+      preventDefault()
       goTo(0)
     } else if (k === 'End') {
-      e.preventDefault()
+      preventDefault()
       goTo(places.length - 1)
     } else if (k === 'Enter' || k === ' ') {
       const p = placeAt(cursor)
-      if (cursor >= 0 && p?.slug) {
-        e.preventDefault()
-        navigate(`/projects/${p.slug}`)
-      }
-    } else if (k === '?' || (k === '/' && e.shiftKey)) {
-      e.preventDefault()
-      setShowKeys(true)
+      if (cursor < 0 || !p?.slug) return false
+      preventDefault()
+      navigate(`/projects/${p.slug}`)
     } else if (k === 'Escape') {
       setCursor(-1)
       setAnnounce('Left the island map.')
+    } else {
+      return false
     }
+    return true
   }
+
+  const onMapKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
+      e.preventDefault()
+      setShowKeys(true)
+      return
+    }
+    travelKey(e.key, () => e.preventDefault())
+  }
+
+  // Once you have stepped onto the island the keys keep working wherever focus
+  // happens to be. Binding them only to the marker group meant that anything
+  // which dropped focus — closing the key guide, most obviously — silently took
+  // the controls away with it, and the arrows did nothing at all.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const t = e.target as HTMLElement | null
+      if (t?.closest('input, textarea, select, [contenteditable="true"]')) return
+      if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
+        e.preventDefault()
+        setShowKeys(true)
+        return
+      }
+      // the guide owns the keyboard while it is open
+      if (showKeys) return
+      // don't steal the arrows from someone reading a panel who never came here
+      if (cursor < 0) return
+      // the group's own handler already dealt with it
+      if (t?.closest('.ws-markers')) return
+      travelKey(e.key, () => e.preventDefault())
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
 
   // The first time someone arrives here by keyboard, say what the keys are —
   // controls nobody can discover are the same as no controls.
@@ -412,18 +446,33 @@ export function Root({ content, route, navigate }: ThemeProps) {
         <Link to="/" navigate={navigate} className="ws-mark">
           DH
         </Link>
-        <nav aria-label="Sections">
-          {TOP_LEVEL_ROUTES.filter((r) => r.path !== '/').map((r) => (
-            <Link
-              key={r.path}
-              to={r.path}
-              navigate={navigate}
-              className={`ws-nav-link${path === r.path ? ' ws-on' : ''}`}
-            >
-              {r.label}
-            </Link>
-          ))}
-        </nav>
+        {/* One row of chrome, not two. A floating pill in a corner collided
+            with the hero card on the landing and with the panel everywhere
+            else — there is no corner that is free on every route, so the
+            control belongs in the bar that already exists. */}
+        <div className="ws-nav-right">
+          <nav aria-label="Sections">
+            {TOP_LEVEL_ROUTES.filter((r) => r.path !== '/').map((r) => (
+              <Link
+                key={r.path}
+                to={r.path}
+                navigate={navigate}
+                className={`ws-nav-link${path === r.path ? ' ws-on' : ''}`}
+              >
+                {r.label}
+              </Link>
+            ))}
+          </nav>
+          <button
+            type="button"
+            className="ws-keys-open"
+            onClick={() => setShowKeys(true)}
+            aria-haspopup="dialog"
+          >
+            <kbd aria-hidden="true">?</kbd>
+            <span>Travel by keyboard</span>
+          </button>
+        </div>
       </header>
 
       {home ? (
@@ -440,10 +489,17 @@ export function Root({ content, route, navigate }: ThemeProps) {
         </section>
       )}
 
-      <button type="button" className="ws-keys-open" onClick={() => setShowKeys(true)}>
-        Keyboard controls
-      </button>
-      {showKeys && <KeyGuide onClose={() => setShowKeys(false)} flat={flat} />}
+      {showKeys && (
+        <KeyGuide
+          flat={flat}
+          onClose={() => {
+            setShowKeys(false)
+            // Hand the keyboard back to the island. Closing used to drop focus
+            // on the body, which is exactly where the arrow keys go to die.
+            goTo(cursor < 0 ? 0 : cursor)
+          }}
+        />
+      )}
 
       {showHud && (
         <aside className="ws-hud">
