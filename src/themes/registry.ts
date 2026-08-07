@@ -38,6 +38,18 @@ export const themes: ThemeDescriptor[] = [
     load: () => import('./watershed'),
   },
   {
+    id: 'landfall',
+    name: 'Landfall',
+    description:
+      'The same island, settled: roads worn between the towns, boats on the water, a turning year.',
+    requirements: { webgl2: true },
+    // Forked from watershed 2026-08-07 and built on top of it. Watershed is kept
+    // exactly as it is, so this one carries the risk of the new work alone.
+    weight: 4,
+    listed: true,
+    load: () => import('./landfall'),
+  },
+  {
     id: 'atlas',
     name: 'Atlas',
     description:

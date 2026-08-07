@@ -1,0 +1,780 @@
+/* landfall — the eroded island, settled.
+   Daylight theme: the land carries the colour, so the interface is glass and
+   ink over it and stays out of the way. Its own palette and primitives; nothing
+   is shared with julia, singularity or atlas. */
+
+.lf {
+  --lf-sky: #bcc9d6;
+  --lf-ink: #10161c;
+  --lf-paper: #f4f2ec;
+  --lf-muted: #5d6874;
+  --lf-accent: #1d6a8f;
+  --lf-accent-warm: #c2683a;
+  --lf-glass: rgba(244, 242, 236, 0.9);
+  --lf-ease: cubic-bezier(0.22, 0.68, 0.24, 1);
+
+  position: relative;
+  min-height: 100dvh;
+  background: var(--lf-sky);
+  color: var(--lf-ink);
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+}
+
+.lf-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  cursor: grab;
+  /* The scene renders into a deliberately small buffer; this is what blows it
+     back up as hard pixels instead of a blurry stretch. Order matters — the
+     last supported value wins, and `pixelated` is the one we actually want. */
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+
+.lf-canvas:active {
+  cursor: grabbing;
+}
+
+/* ---------- boot & failure ---------- */
+
+.lf-boot {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  display: grid;
+  place-content: center;
+  gap: 0.4rem;
+  text-align: center;
+  background: var(--lf-sky);
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+
+.lf-dim {
+  color: var(--lf-muted);
+  font-size: 0.85rem;
+}
+
+/* ---------- map markers ---------- */
+
+.lf-markers {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+/* --- keyboard travel ------------------------------------------------------ */
+
+.lf-keys-open {
+  position: fixed;
+  left: 1rem;
+  bottom: 1rem;
+  z-index: 6;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 22, 28, 0.18);
+  background: var(--lf-glass);
+  color: var(--lf-ink);
+  font: inherit;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  backdrop-filter: blur(3px);
+  opacity: 0.55;
+  transition: opacity 160ms var(--lf-ease);
+}
+
+.lf-keys-open:hover,
+.lf-keys-open:focus-visible {
+  opacity: 1;
+}
+
+.lf-keys-back {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 1.2rem;
+  background: rgba(8, 16, 22, 0.55);
+}
+
+.lf-keys {
+  max-width: 32rem;
+  width: 100%;
+  max-height: 86vh;
+  overflow-y: auto;
+  padding: 1.4rem 1.5rem;
+  border-radius: 6px;
+  background: var(--lf-paper);
+  color: var(--lf-ink);
+  box-shadow: 0 18px 60px rgba(8, 16, 22, 0.5);
+}
+
+.lf-keys h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+}
+
+.lf-keys p {
+  margin: 0 0 0.9rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.lf-keys-list {
+  margin: 0 0 1rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.lf-keys-list > div {
+  display: grid;
+  grid-template-columns: 8.5rem 1fr;
+  gap: 0.6rem;
+  align-items: baseline;
+  font-size: 0.82rem;
+}
+
+.lf-keys-list dt,
+.lf-keys-list dd {
+  margin: 0;
+}
+
+.lf-keys kbd {
+  display: inline-block;
+  padding: 0.05rem 0.34rem;
+  border-radius: 3px;
+  border: 1px solid rgba(16, 22, 28, 0.28);
+  border-bottom-width: 2px;
+  background: #fff;
+  font: inherit;
+  font-size: 0.74rem;
+}
+
+.lf-keys-close {
+  padding: 0.4rem 0.9rem;
+  border-radius: 3px;
+  border: 1px solid var(--lf-ink);
+  background: var(--lf-ink);
+  color: var(--lf-paper);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.lf-keys-close:focus-visible {
+  outline: 2px solid var(--lf-accent-warm);
+  outline-offset: 2px;
+}
+
+/* the flat island: no GL, same map */
+.lf-flat {
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+
+@media (max-width: 900px) {
+  .lf-keys-open {
+    bottom: auto;
+    top: 0.7rem;
+    left: auto;
+    right: 0.8rem;
+  }
+}
+
+.lf-markers > * {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
+  transition: opacity 200ms linear;
+}
+
+.lf-region {
+  font-size: 0.66rem;
+  font-weight: 500;
+  letter-spacing: 0.34em;
+  color: var(--lf-paper);
+  text-shadow: 0 1px 10px rgba(8, 16, 22, 0.85);
+  white-space: nowrap;
+}
+
+.lf-place {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.1rem 0.42rem 0.1rem 0.3rem;
+  border-radius: 999px;
+  background: var(--lf-glass);
+  border: 1px solid rgba(16, 22, 28, 0.18);
+  box-shadow: 0 2px 10px rgba(8, 16, 22, 0.28);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  backdrop-filter: blur(3px);
+  /* these are real buttons now, so undo the agent styles rather than the
+     semantics — the marker has to stay keyboard-reachable */
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* Where the keyboard is standing. Deliberately loud: this is the only cue a
+   sighted keyboard user has for where the camera has just sailed to. */
+.lf-place.lf-here,
+.lf-place:focus-visible {
+  outline: 2px solid var(--lf-accent-warm);
+  outline-offset: 3px;
+  background: var(--lf-paper);
+  border-color: var(--lf-accent-warm);
+  z-index: 1;
+}
+
+/* Visible only to assistive tech. */
+.lf-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.lf-place i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lf-ink);
+}
+
+.lf-place-project {
+  cursor: pointer;
+  font-weight: 500;
+  /* never transition `transform`: JS rewrites it every frame to track the
+     terrain, so an easing curve leaves the marker forever chasing the origin */
+  transition:
+    background 180ms var(--lf-ease),
+    border-color 180ms var(--lf-ease);
+}
+
+.lf-place-project i {
+  background: var(--lf-accent-warm);
+}
+
+.lf-place-school i,
+.lf-place-work i {
+  background: var(--lf-accent);
+}
+
+.lf-place-interest {
+  opacity: 0.82;
+  font-size: 0.66rem;
+}
+
+.lf-place-interest i {
+  background: var(--lf-muted);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .lf-place-project:hover {
+    background: var(--lf-paper);
+    border-color: var(--lf-accent-warm);
+  }
+}
+
+/* ---------- nav ---------- */
+
+.lf-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 54px;
+  padding: 0 clamp(1rem, 3.5vw, 2.2rem);
+  pointer-events: none;
+}
+
+.lf-nav > * {
+  pointer-events: auto;
+}
+
+.lf-mark {
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: 0.09em;
+  color: var(--lf-paper);
+  text-decoration: none;
+  text-shadow: 0 1px 10px rgba(8, 16, 22, 0.8);
+}
+
+.lf-nav nav {
+  display: flex;
+  gap: clamp(0.8rem, 2.4vw, 1.6rem);
+}
+
+.lf-nav-link {
+  position: relative;
+  color: var(--lf-paper);
+  text-decoration: none;
+  font-size: 0.88rem;
+  padding: 0.25rem 0;
+  text-shadow: 0 1px 10px rgba(8, 16, 22, 0.8);
+  opacity: 0.82;
+  transition: opacity 180ms var(--lf-ease);
+}
+
+.lf-nav-link::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--lf-accent-warm);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 200ms var(--lf-ease);
+}
+
+.lf-nav-link.lf-on {
+  opacity: 1;
+}
+
+.lf-nav-link.lf-on::after {
+  transform: scaleX(1);
+}
+
+/* ---------- hero ---------- */
+
+.lf-hero {
+  position: fixed;
+  z-index: 4;
+  left: clamp(1rem, 4vw, 3.4rem);
+  bottom: clamp(1.2rem, 5vh, 3rem);
+  width: min(30rem, calc(100vw - 2rem));
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.4rem 1.5rem 1.5rem;
+  border-radius: 14px;
+  background: var(--lf-glass);
+  border: 1px solid rgba(16, 22, 28, 0.14);
+  box-shadow: 0 18px 50px rgba(8, 16, 22, 0.3);
+  backdrop-filter: blur(10px);
+}
+
+.lf-eyebrow {
+  margin: 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--lf-accent-warm);
+}
+
+.lf-hero h1 {
+  margin: 0;
+  font-size: clamp(2rem, 4.6vw, 3.1rem);
+  font-weight: 700;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+}
+
+.lf-lede {
+  margin: 0;
+  color: var(--lf-muted);
+  line-height: 1.5;
+  font-size: 0.95rem;
+  max-width: 34ch;
+}
+
+.lf-note {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--lf-ink) 72%, var(--lf-muted));
+  border-left: 2px solid var(--lf-accent);
+  padding-left: 0.7rem;
+}
+
+.lf-socials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  font-size: 0.85rem;
+}
+
+.lf-socials a,
+.lf-out {
+  color: var(--lf-muted);
+  text-decoration: none;
+  border-bottom: 1px solid var(--lf-accent);
+  padding-bottom: 1px;
+  transition: color 160ms var(--lf-ease);
+}
+
+.lf-out {
+  display: inline-block;
+  margin: 0.35rem 1.1rem 0 0;
+}
+
+.lf-ticker {
+  font-size: 0.78rem;
+  color: var(--lf-muted);
+  text-decoration: none;
+  line-height: 1.4;
+}
+
+.lf-ticker b {
+  font-weight: 500;
+  font-size: 0.64rem;
+  letter-spacing: 0.24em;
+  color: var(--lf-accent-warm);
+}
+
+/* ---------- reading panel ---------- */
+
+.lf-panel {
+  position: fixed;
+  z-index: 5;
+  top: 54px;
+  right: clamp(0.7rem, 2.4vw, 1.8rem);
+  bottom: 1rem;
+  width: min(29rem, calc(100vw - 1.4rem));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1.5rem 1.6rem 2rem;
+  border-radius: 14px;
+  background: var(--lf-glass);
+  border: 1px solid rgba(16, 22, 28, 0.14);
+  box-shadow: 0 18px 50px rgba(8, 16, 22, 0.3);
+  backdrop-filter: blur(12px);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(16, 22, 28, 0.3) transparent;
+}
+
+.lf-panel h1 {
+  margin: 0 0 1rem;
+  font-size: clamp(1.6rem, 3.2vw, 2.2rem);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.lf-h2 {
+  margin: 1.7rem 0 0.7rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--lf-accent);
+}
+
+.lf-entry {
+  margin-bottom: 1.3rem;
+}
+
+.lf-entry h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1.04rem;
+  font-weight: 500;
+}
+
+.lf-entry p {
+  margin: 0.24rem 0;
+  line-height: 1.55;
+  font-size: 0.93rem;
+}
+
+.lf-entry ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.05rem;
+  line-height: 1.55;
+  font-size: 0.9rem;
+  color: color-mix(in srgb, var(--lf-ink) 84%, var(--lf-muted));
+}
+
+.lf-entry li {
+  margin-bottom: 0.24rem;
+}
+
+.lf-meta {
+  color: var(--lf-muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.lf-meta a {
+  color: var(--lf-ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--lf-accent);
+}
+
+.lf-prose {
+  line-height: 1.6;
+  max-width: 62ch;
+  font-size: 0.94rem;
+}
+
+.lf-upnext {
+  border: 1px solid color-mix(in srgb, var(--lf-accent) 34%, transparent);
+  border-radius: 10px;
+  background: linear-gradient(120deg, rgba(29, 106, 143, 0.09), transparent 62%);
+  padding: 0.85rem 1rem 0.9rem;
+  margin-bottom: 1.2rem;
+}
+
+.lf-upnext-tag {
+  margin: 0 0 0.5rem;
+  color: var(--lf-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-size: 0.64rem;
+}
+
+.lf-upnext h3 {
+  margin: 0 0 0.15rem;
+  font-size: 0.98rem;
+  font-weight: 500;
+}
+
+.lf-upnext p {
+  margin: 0 0 0.6rem;
+  color: var(--lf-muted);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.lf-list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.lf-card {
+  display: grid;
+  gap: 0.24rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid rgba(16, 22, 28, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.35);
+  color: var(--lf-ink);
+  text-decoration: none;
+  transition:
+    transform 200ms var(--lf-ease),
+    border-color 200ms var(--lf-ease);
+}
+
+.lf-card:active {
+  transform: scale(0.985);
+}
+
+.lf-chip {
+  width: fit-content;
+  color: var(--lf-accent-warm);
+  border: 1px solid color-mix(in srgb, var(--lf-accent-warm) 45%, transparent);
+  border-radius: 999px;
+  padding: 0.1rem 0.48rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.lf-card-title {
+  font-size: 1.08rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.lf-card-sum {
+  color: var(--lf-muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.lf-back {
+  display: inline-block;
+  margin-bottom: 0.8rem;
+  color: var(--lf-muted);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.lf-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.7rem 1.1rem;
+  margin: 0 0 1.1rem;
+  padding: 0.85rem 0;
+  border-top: 1px solid rgba(16, 22, 28, 0.16);
+  border-bottom: 1px solid rgba(16, 22, 28, 0.16);
+}
+
+.lf-facts dt {
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--lf-muted);
+}
+
+.lf-facts dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.92rem;
+}
+
+.lf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1.2rem;
+  align-items: center;
+}
+
+.lf-btn {
+  display: inline-block;
+  color: var(--lf-ink);
+  text-decoration: none;
+  font-size: 0.88rem;
+  font-weight: 500;
+  border: 1px solid color-mix(in srgb, var(--lf-accent) 55%, transparent);
+  border-radius: 999px;
+  padding: 0.5rem 1.1rem;
+  transition:
+    transform 140ms var(--lf-ease),
+    background 160ms var(--lf-ease);
+}
+
+.lf-btn:active {
+  transform: scale(0.97);
+}
+
+.lf-btn-primary {
+  background: var(--lf-accent);
+  border-color: var(--lf-accent);
+  color: var(--lf-paper);
+  font-weight: 600;
+}
+
+.lf-hud {
+  position: fixed;
+  z-index: 7;
+  left: 1rem;
+  bottom: 1rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 8px;
+  background: var(--lf-glass);
+  border: 1px solid rgba(16, 22, 28, 0.16);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- hover, focus, motion ---------- */
+
+@media (hover: hover) and (pointer: fine) {
+  .lf-nav-link:hover {
+    opacity: 1;
+  }
+  .lf-nav-link:hover::after {
+    transform: scaleX(1);
+  }
+  .lf-socials a:hover,
+  .lf-out:hover,
+  .lf-back:hover,
+  .lf-meta a:hover,
+  .lf-ticker:hover {
+    color: var(--lf-accent-warm);
+  }
+  .lf-card:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--lf-accent) 55%, transparent);
+  }
+  .lf-btn:hover {
+    background: rgba(29, 106, 143, 0.12);
+  }
+  .lf-btn-primary:hover {
+    background: color-mix(in srgb, var(--lf-accent) 82%, white);
+  }
+}
+
+.lf a:focus-visible,
+.lf [role='link']:focus-visible {
+  outline: 2px solid var(--lf-accent-warm);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.lf-rise {
+  animation: lf-rise 420ms var(--lf-ease) both;
+}
+
+@keyframes lf-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lf-rise {
+    animation: lf-fade 200ms ease both;
+  }
+  @keyframes lf-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  .lf-card,
+  .lf-place-project,
+  .lf-nav-link {
+    transition: none;
+  }
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 900px) {
+  .lf-hero,
+  .lf-panel {
+    left: 0.6rem;
+    right: 0.6rem;
+    width: auto;
+  }
+  .lf-panel {
+    top: auto;
+    bottom: 0.6rem;
+    max-height: 62dvh;
+    padding: 1.2rem 1.1rem 1.5rem;
+  }
+  .lf-hero {
+    bottom: 0.6rem;
+    padding: 1.1rem 1.1rem 1.2rem;
+  }
+  /* labels get dense on a small screen — keep the clickable ones */
+  .lf-place-interest,
+  .lf-region {
+    display: none;
+  }
+  /* the debug HUD owns the corner the sheet needs */
+  .lf-hud {
+    bottom: auto;
+    top: 60px;
+    left: 0.6rem;
+  }
+}
