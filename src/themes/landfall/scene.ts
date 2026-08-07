@@ -163,7 +163,12 @@ export function createScene(
   const skydome = new THREE.Mesh(skyGeo, skyMat)
   skydome.renderOrder = -1
   scene.add(skydome)
-  scene.fog = new THREE.Fog(new THREE.Color(SKY_HORIZON).getHex(), PLANE * 1.1, PLANE * 3.6)
+  // Fog exists to dissolve the sea into the sky at the horizon, but at
+  // 110–360 units it saturated almost everything a high camera can see, which
+  // is why the swell only ever showed from down near the waterline: the waves
+  // were there, painted over by fog. Pushed out far enough that the mid-field
+  // keeps its own colour and only the true distance goes to haze.
+  scene.fog = new THREE.Fog(new THREE.Color(SKY_HORIZON).getHex(), PLANE * 3.2, PLANE * 11)
 
   // --- terrain ---------------------------------------------------------------
   const positions = new Float32Array(N * N * 3)
@@ -236,16 +241,16 @@ export function createScene(
    * resolution exactly where it is already too far away to read.
    */
   const seaGeo = (() => {
-    const N = 320
+    const N = 384
     const half = PLANE * 12
     // Linear out to `near`, then expanding hard to the horizon. A plain power
     // curve crams the resolution into the middle of the *map*, which is the
     // middle of the island — dry land — and leaves the coastline itself coarse
     // enough to show a comb of triangles against the sand.
-    const near = PLANE * 1.5
+    const near = PLANE * 3.5
     const warp = (t: number) => {
       const a = Math.abs(t)
-      return Math.sign(t) * (a * near + Math.pow(a, 5) * (half - near))
+      return Math.sign(t) * (a * near + Math.pow(a, 4) * (half - near))
     }
     const pos = new Float32Array((N + 1) * (N + 1) * 3)
     const idx = new Uint32Array(N * N * 6)
@@ -264,12 +269,15 @@ export function createScene(
         const b = a + 1
         const c = a + N + 1
         const d = c + 1
+        // Wind these the same way PlaneGeometry does. Reversed, the surface's
+        // front face points *down*, so the whole ocean is backface-culled from
+        // any camera above it — which looks exactly like a sea with no waves.
         idx[k++] = a
-        idx[k++] = c
-        idx[k++] = b
         idx[k++] = b
         idx[k++] = c
+        idx[k++] = b
         idx[k++] = d
+        idx[k++] = c
       }
     }
     const g = new THREE.BufferGeometry()
@@ -300,14 +308,14 @@ export function createScene(
   depthTex.wrapS = THREE.ClampToEdgeWrapping
   depthTex.wrapT = THREE.ClampToEdgeWrapping
 
-  const crest = linear([0.46, 0.72, 0.92])
+  const crest = linear([0.3, 0.5, 0.7])
   const foamCol = linear([0.86, 0.93, 0.97])
   const seaUniforms = {
     uTime: { value: 0 },
     uHeight: { value: depthTex },
     uSea: { value: world.seaLevel },
     uPlane: { value: PLANE },
-    uAmp: { value: HEIGHT * 0.055 },
+    uAmp: { value: HEIGHT * 0.018 },
     uCrest: { value: crest },
     uFoam: { value: foamCol },
   }
@@ -344,12 +352,15 @@ export function createScene(
          // three crossing swells rather than one, so the surface never reads as
          // a single repeating corrugation
          float swell(vec2 p, float t) {
-           float w = sin(dot(p, vec2(0.82, -0.57)) * 0.20 + t * 1.90) * 0.52;
-           w += sin(dot(p, vec2(0.31, 0.95)) * 0.33 + t * 2.60) * 0.28;
-           w += sin(dot(p, vec2(-0.70, 0.71)) * 0.67 + t * 3.40) * 0.14;
+           float w = sin(dot(p, vec2(0.82, -0.57)) * 0.085 + t * 1.30) * 0.52;
+           w += sin(dot(p, vec2(0.31, 0.95)) * 0.147 + t * 1.75) * 0.28;
+           w += sin(dot(p, vec2(-0.70, 0.71)) * 0.31 + t * 2.40) * 0.14;
            // a short chop on top of the swell: this is the part the eye reads
            // as *movement* rather than as a slowly breathing surface
-           w += sin(dot(p, vec2(0.96, 0.28)) * 1.90 + t * 5.20) * 0.06;
+           // the chop is the only term short enough to alias on the coarse
+           // outer grid, so it — and not the whole swell — is what fades away
+           float fine = 1.0 - smoothstep(120.0, 320.0, length(p));
+           w += sin(dot(p, vec2(0.96, 0.28)) * 0.95 + t * 3.60) * 0.05 * fine;
            return w;
          }`,
       )
@@ -367,11 +378,11 @@ export function createScene(
          // flatten into the beach, or the swell saws through the sand
          float shoal = smoothstep(0.0, 0.05, depth);
          // and fade out long before the grid runs coarse
-         float reach = 1.0 - smoothstep(uPlane * 1.2, uPlane * 4.0, length(wp.xz));
+         float reach = 1.0 - smoothstep(uPlane * 4.0, uPlane * 9.0, length(wp.xz));
          vWave = swell(wp.xz, uTime) * shoal * reach;
          // whitecaps only where the grid is fine enough to carry them; further
          // out the crests alias across huge triangles and read as static litter
-         vNear = 1.0 - smoothstep(uPlane * 0.7, uPlane * 1.7, length(wp.xz));
+         vNear = 1.0 - smoothstep(uPlane * 3.0, uPlane * 7.0, length(wp.xz));
          // the plane is rotated flat, so local +Z is world up
          transformed.z += vWave * uAmp;`,
       )
@@ -395,12 +406,12 @@ export function createScene(
          // band the swell rather than shading it smoothly — the land is
          // posterised and a smooth ocean beside it looks like a different render
          float lift = clamp(vWave * 0.75 + 0.5, 0.0, 1.0);
-         float band = floor(lift * 5.0) / 5.0;
-         diffuseColor.rgb = mix(diffuseColor.rgb, uCrest, band * 0.95);
+         float band = floor(lift * 4.0) / 4.0;
+         diffuseColor.rgb = mix(diffuseColor.rgb, uCrest, band * 0.34);
          // whitecaps: the top rung of the ladder breaks into foam, so the swell
          // has a moving edge instead of only a moving tone
-         float cap = smoothstep(0.84, 0.96, lift);
-         diffuseColor.rgb = mix(diffuseColor.rgb, uFoam, cap * vNear * 0.8);
+         float cap = smoothstep(0.93, 1.0, lift);
+         diffuseColor.rgb = mix(diffuseColor.rgb, uFoam, cap * vNear * 0.5);
 
          vec2 tuv = vXZ / uPlane + 0.5;
          float land = 0.0;
@@ -412,9 +423,9 @@ export function createScene(
          float shore = 1.0 - smoothstep(0.0, 0.085, depth);
          float roll = sin(depth * 150.0 - uTime * 2.6) * 0.5 + 0.5;
          float foam = shore * smoothstep(0.35, 0.7, roll);
-         float wash = shore * shore * 0.5;
-         diffuseColor.rgb = mix(diffuseColor.rgb, uFoam, clamp(foam * 0.9 + wash, 0.0, 1.0));
-         diffuseColor.a = mix(diffuseColor.a, 0.97, foam);`,
+         float wash = shore * shore * 0.16;
+         diffuseColor.rgb = mix(diffuseColor.rgb, uFoam, clamp(foam * 0.6 + wash, 0.0, 1.0));
+         diffuseColor.a = mix(diffuseColor.a, 0.95, foam * 0.7);`,
       )
   }
 
