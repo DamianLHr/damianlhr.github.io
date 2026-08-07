@@ -32,7 +32,7 @@ const BAYER = [
  * boundaries, so it still bands like the rest of the world without the rings.
  */
 function puffTexture(rnd: () => number, steps = 6): THREE.Texture {
-  const s = 64
+  const s = 96
   const c = document.createElement('canvas')
   c.width = s
   c.height = s
@@ -148,7 +148,7 @@ export function createSky(
       new THREE.SpriteMaterial({
         map: m,
         transparent: true,
-        opacity: 0.5,
+        opacity: 0.66,
         depthWrite: false,
         color: new THREE.Color(0.96, 0.98, 1),
         fog: true,
@@ -161,11 +161,11 @@ export function createSky(
     const bias = (rnd() - 0.62) * half
     sp.position.set(
       -WIND.x * bias + (rnd() - 0.5) * half * 2,
-      height * (1.7 + rnd() * 0.9),
+      height * (1.35 + rnd() * 0.85),
       -WIND.y * bias + (rnd() - 0.5) * half * 2,
     )
-    const scl = plane * (0.06 + rnd() * 0.09)
-    sp.scale.set(scl, scl * (0.42 + rnd() * 0.16), 1)
+    const scl = plane * (0.15 + rnd() * 0.17)
+    sp.scale.set(scl, scl * (0.44 + rnd() * 0.16), 1)
     sp.renderOrder = 4
     scene.add(sp)
     cloudList.push({ sp, drift: 1.4 + rnd() * 1.6, bob: rnd() * Math.PI * 2 })
@@ -250,7 +250,7 @@ export function createSky(
   return {
     setWeather(v: number) {
       wet = Math.max(0, Math.min(1, v))
-      for (const m of cloudMats) m.opacity = 0.32 + wet * 0.34
+      for (const m of cloudMats) m.opacity = 0.5 + wet * 0.32
       mistMat.opacity = 0.14 + wet * 0.3
     },
     update(dt, now) {
