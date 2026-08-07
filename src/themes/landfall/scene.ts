@@ -315,7 +315,7 @@ export function createScene(
     uHeight: { value: depthTex },
     uSea: { value: world.seaLevel },
     uPlane: { value: PLANE },
-    uAmp: { value: HEIGHT * 0.018 },
+    uAmp: { value: HEIGHT * 0.007 },
     uCrest: { value: crest },
     uFoam: { value: foamCol },
   }
@@ -352,9 +352,9 @@ export function createScene(
          // three crossing swells rather than one, so the surface never reads as
          // a single repeating corrugation
          float swell(vec2 p, float t) {
-           float w = sin(dot(p, vec2(0.82, -0.57)) * 0.085 + t * 1.30) * 0.52;
-           w += sin(dot(p, vec2(0.31, 0.95)) * 0.147 + t * 1.75) * 0.28;
-           w += sin(dot(p, vec2(-0.70, 0.71)) * 0.31 + t * 2.40) * 0.14;
+           float w = sin(dot(p, vec2(0.82, -0.57)) * 0.26 + t * 1.30) * 0.52;
+           w += sin(dot(p, vec2(0.31, 0.95)) * 0.44 + t * 1.75) * 0.28;
+           w += sin(dot(p, vec2(-0.70, 0.71)) * 0.88 + t * 2.40) * 0.14;
            // a short chop on top of the swell: this is the part the eye reads
            // as *movement* rather than as a slowly breathing surface
            // the chop is the only term short enough to alias on the coarse
@@ -410,11 +410,11 @@ export function createScene(
          // posterised and a smooth ocean beside it looks like a different render
          float lift = clamp(vWave * 0.75 + 0.5, 0.0, 1.0);
          float band = floor(lift * 4.0) / 4.0;
-         diffuseColor.rgb = mix(diffuseColor.rgb, uCrest, band * 0.34);
+         diffuseColor.rgb = mix(diffuseColor.rgb, uCrest, band * 0.11);
          // whitecaps: the top rung of the ladder breaks into foam, so the swell
          // has a moving edge instead of only a moving tone
          float cap = smoothstep(0.93, 1.0, lift);
-         diffuseColor.rgb = mix(diffuseColor.rgb, uFoam, cap * vNear * 0.5);
+         diffuseColor.rgb = mix(diffuseColor.rgb, uFoam, cap * vNear * 0.2);
 
          vec2 tuv = vXZ / uPlane + 0.5;
          float land = 0.0;
