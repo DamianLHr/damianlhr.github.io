@@ -300,14 +300,14 @@ export function createScene(
   depthTex.wrapS = THREE.ClampToEdgeWrapping
   depthTex.wrapT = THREE.ClampToEdgeWrapping
 
-  const crest = linear([0.3, 0.52, 0.72])
+  const crest = linear([0.46, 0.72, 0.92])
   const foamCol = linear([0.86, 0.93, 0.97])
   const seaUniforms = {
     uTime: { value: 0 },
     uHeight: { value: depthTex },
     uSea: { value: world.seaLevel },
     uPlane: { value: PLANE },
-    uAmp: { value: HEIGHT * 0.03 },
+    uAmp: { value: HEIGHT * 0.055 },
     uCrest: { value: crest },
     uFoam: { value: foamCol },
   }
@@ -340,12 +340,16 @@ export function createScene(
          uniform float uAmp;
          varying float vWave;
          varying vec2 vXZ;
+         varying float vNear;
          // three crossing swells rather than one, so the surface never reads as
          // a single repeating corrugation
          float swell(vec2 p, float t) {
-           float w = sin(dot(p, vec2(0.82, -0.57)) * 0.20 + t * 1.10) * 0.55;
-           w += sin(dot(p, vec2(0.31, 0.95)) * 0.33 + t * 1.55) * 0.30;
-           w += sin(dot(p, vec2(-0.70, 0.71)) * 0.67 + t * 2.10) * 0.15;
+           float w = sin(dot(p, vec2(0.82, -0.57)) * 0.20 + t * 1.90) * 0.52;
+           w += sin(dot(p, vec2(0.31, 0.95)) * 0.33 + t * 2.60) * 0.28;
+           w += sin(dot(p, vec2(-0.70, 0.71)) * 0.67 + t * 3.40) * 0.14;
+           // a short chop on top of the swell: this is the part the eye reads
+           // as *movement* rather than as a slowly breathing surface
+           w += sin(dot(p, vec2(0.96, 0.28)) * 1.90 + t * 5.20) * 0.06;
            return w;
          }`,
       )
@@ -365,6 +369,9 @@ export function createScene(
          // and fade out long before the grid runs coarse
          float reach = 1.0 - smoothstep(uPlane * 1.2, uPlane * 4.0, length(wp.xz));
          vWave = swell(wp.xz, uTime) * shoal * reach;
+         // whitecaps only where the grid is fine enough to carry them; further
+         // out the crests alias across huge triangles and read as static litter
+         vNear = 1.0 - smoothstep(uPlane * 0.7, uPlane * 1.7, length(wp.xz));
          // the plane is rotated flat, so local +Z is world up
          transformed.z += vWave * uAmp;`,
       )
@@ -379,15 +386,21 @@ export function createScene(
          uniform vec3 uCrest;
          uniform vec3 uFoam;
          varying float vWave;
-         varying vec2 vXZ;`,
+         varying vec2 vXZ;
+         varying float vNear;`,
       )
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
          // band the swell rather than shading it smoothly — the land is
          // posterised and a smooth ocean beside it looks like a different render
-         float band = floor(clamp(vWave * 0.6 + 0.5, 0.0, 1.0) * 4.0) / 4.0;
-         diffuseColor.rgb = mix(diffuseColor.rgb, uCrest, band * 0.55);
+         float lift = clamp(vWave * 0.75 + 0.5, 0.0, 1.0);
+         float band = floor(lift * 5.0) / 5.0;
+         diffuseColor.rgb = mix(diffuseColor.rgb, uCrest, band * 0.95);
+         // whitecaps: the top rung of the ladder breaks into foam, so the swell
+         // has a moving edge instead of only a moving tone
+         float cap = smoothstep(0.84, 0.96, lift);
+         diffuseColor.rgb = mix(diffuseColor.rgb, uFoam, cap * vNear * 0.8);
 
          vec2 tuv = vXZ / uPlane + 0.5;
          float land = 0.0;
