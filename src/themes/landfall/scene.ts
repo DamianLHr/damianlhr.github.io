@@ -315,7 +315,7 @@ export function createScene(
     uHeight: { value: depthTex },
     uSea: { value: world.seaLevel },
     uPlane: { value: PLANE },
-    uAmp: { value: HEIGHT * 0.007 },
+    uAmp: { value: HEIGHT * 0.005 },
     uCrest: { value: crest },
     uFoam: { value: foamCol },
   }
@@ -349,18 +349,38 @@ export function createScene(
          varying float vWave;
          varying vec2 vXZ;
          varying float vNear;
-         // three crossing swells rather than one, so the surface never reads as
-         // a single repeating corrugation
+         // Sines alone interfere into a fixed lattice, which is exactly what
+         // reads as a repeating quilt however many of them are added. The
+         // sampling grid is bent by slow noise first, so crests wander and
+         // never line up twice, and a second noise lets whole stretches of sea
+         // go glassy instead of the entire surface being uniformly busy.
+         float hash21(vec2 p) {
+           vec3 q = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+           q += dot(q, q.yzx + 33.33);
+           return fract((q.x + q.y) * q.z);
+         }
+         float vnoise(vec2 p) {
+           vec2 i = floor(p);
+           vec2 f = fract(p);
+           f = f * f * (3.0 - 2.0 * f);
+           float a = hash21(i);
+           float b = hash21(i + vec2(1.0, 0.0));
+           float c = hash21(i + vec2(0.0, 1.0));
+           float d = hash21(i + vec2(1.0, 1.0));
+           return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+         }
          float swell(vec2 p, float t) {
-           float w = sin(dot(p, vec2(0.82, -0.57)) * 0.26 + t * 1.30) * 0.52;
-           w += sin(dot(p, vec2(0.31, 0.95)) * 0.44 + t * 1.75) * 0.28;
-           w += sin(dot(p, vec2(-0.70, 0.71)) * 0.88 + t * 2.40) * 0.14;
-           // a short chop on top of the swell: this is the part the eye reads
-           // as *movement* rather than as a slowly breathing surface
-           // the chop is the only term short enough to alias on the coarse
-           // outer grid, so it — and not the whole swell — is what fades away
+           // Periods here are deliberately long: at the speeds this ran before,
+           // a crest crossed its own wavelength in a couple of seconds, which
+           // is a pond in a breeze rather than an ocean.
+           vec2 q = p + vec2(vnoise(p * 0.012 + t * 0.012), vnoise(p * 0.013 - t * 0.010)) * 16.0;
+           float w = sin(dot(q, vec2(0.82, -0.57)) * 0.26 + t * 0.34) * 0.52;
+           w += sin(dot(q, vec2(0.31, 0.95)) * 0.44 + t * 0.47) * 0.28;
+           w += sin(dot(q, vec2(-0.70, 0.71)) * 0.88 + t * 0.63) * 0.14;
            float fine = 1.0 - smoothstep(120.0, 320.0, length(p));
-           w += sin(dot(p, vec2(0.96, 0.28)) * 0.95 + t * 3.60) * 0.05 * fine;
+           w += sin(dot(q, vec2(0.96, 0.28)) * 0.95 + t * 0.95) * 0.05 * fine;
+           // long calm patches between the working water
+           w *= 0.35 + 0.65 * vnoise(p * 0.007 + 3.7);
            return w;
          }`,
       )
@@ -410,11 +430,11 @@ export function createScene(
          // posterised and a smooth ocean beside it looks like a different render
          float lift = clamp(vWave * 0.75 + 0.5, 0.0, 1.0);
          float band = floor(lift * 4.0) / 4.0;
-         diffuseColor.rgb = mix(diffuseColor.rgb, uCrest, band * 0.11);
+         diffuseColor.rgb = mix(diffuseColor.rgb, uCrest, band * 0.07);
          // whitecaps: the top rung of the ladder breaks into foam, so the swell
          // has a moving edge instead of only a moving tone
          float cap = smoothstep(0.93, 1.0, lift);
-         diffuseColor.rgb = mix(diffuseColor.rgb, uFoam, cap * vNear * 0.2);
+         diffuseColor.rgb = mix(diffuseColor.rgb, uFoam, cap * vNear * 0.12);
 
          vec2 tuv = vXZ / uPlane + 0.5;
          float land = 0.0;
