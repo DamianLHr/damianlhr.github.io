@@ -15,7 +15,7 @@ export interface WorldMeta {
   lakeScale?: number
   /** least-cost walks between the towns, in grid coordinates */
   roads?: { from: number; to: number; cost: number; points: [number, number][] }[]
-  sites: { x: number; y: number; h: number; basin: number }[]
+  sites: { x: number; y: number; h: number; basin: number; score?: number; coast?: number }[]
 }
 
 export interface World {

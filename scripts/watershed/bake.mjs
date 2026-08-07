@@ -77,7 +77,8 @@ function makeGroundColor(bands, slopeRef, world) {
   const band = (h) => {
     if (h <= bands[0]) return 0
     for (let k = 1; k < bands.length; k++) {
-      if (h <= bands[k]) return (k - 1 + (h - bands[k - 1]) / (bands[k] - bands[k - 1] || 1)) / (bands.length - 1)
+      if (h <= bands[k])
+        return (k - 1 + (h - bands[k - 1]) / (bands[k] - bands[k - 1] || 1)) / (bands.length - 1)
     }
     return 1
   }
@@ -190,12 +191,22 @@ function townSites(w, a, bas, count, lakeDepth) {
         }
       }
       if (nearWater > 7) continue
+      // separately: how far to *open sea*, which is what makes a harbour
+      let coast = 99
+      for (let dy = -10; dy <= 10 && coast > 1; dy += 2) {
+        for (let dx = -10; dx <= 10; dx += 2) {
+          const nx2 = x + dx
+          const ny2 = y + dy
+          if (nx2 < 0 || ny2 < 0 || nx2 >= s || ny2 >= s) continue
+          if (w.height[ny2 * s + nx2] < SEA) coast = Math.min(coast, Math.hypot(dx, dy))
+        }
+      }
       const elev = (w.height[i] - SEA) / Math.max(1e-6, 1 - SEA)
       const score =
-        1 / (1 + a.slope[i] / Math.max(1e-6, a.slopeRef) * 2.2) + // gentle ground
+        1 / (1 + (a.slope[i] / Math.max(1e-6, a.slopeRef)) * 2.2) + // gentle ground
         1 / (1 + Math.abs(nearWater - 2.5) * 0.5) + // beside water, not in it
         (1 - Math.min(1, elev * 2.4)) * 0.8 // lowland
-      cand.push({ x, y, i, score })
+      cand.push({ x, y, i, score, coast: Math.round(Math.min(99, coast)) })
     }
   }
   cand.sort((p, q) => q.score - p.score)
@@ -205,11 +216,20 @@ function townSites(w, a, bas, count, lakeDepth) {
     if (kept.length >= count) break
     if (kept.every((k) => Math.hypot(k.x - c.x, k.y - c.y) > sep)) kept.push(c)
   }
+  // The score already says how good a site is — gentle ground, fresh water, low
+  // and near the coast. Shipping it lets a theme build a town the size the land
+  // deserves instead of dropping the same dot on every one.
+  const best = kept.length ? kept[0].score : 1
+  const worst = kept.length ? kept[kept.length - 1].score : 0
   return kept.map((k) => ({
     x: +(k.x / s).toFixed(4),
     y: +(k.y / s).toFixed(4),
     h: +w.height[k.i].toFixed(4),
     basin: bas.label[k.i],
+    /** 0..1 across the sites this run kept */
+    score: +((k.score - worst) / Math.max(1e-6, best - worst)).toFixed(3),
+    /** cells to open water, capped — a low number means a harbour is possible */
+    coast: k.coast,
   }))
 }
 
@@ -227,7 +247,10 @@ function renderTop(w, a, gc) {
     const wet = a.maxD > 0 ? Math.min(1, w.discharge[i] / (a.maxD * 0.12)) : 0
     let c = gc(h, a.slope[i], wet, i)
     if (h >= SEA) {
-      const lam = Math.max(0, a.nrm[i * 3] * L[0] + a.nrm[i * 3 + 1] * L[1] + a.nrm[i * 3 + 2] * L[2])
+      const lam = Math.max(
+        0,
+        a.nrm[i * 3] * L[0] + a.nrm[i * 3 + 1] * L[1] + a.nrm[i * 3 + 2] * L[2],
+      )
       const shade = 0.45 + 0.75 * lam
       c = [c[0] * shade, c[1] * shade, c[2] * shade]
     }
@@ -278,7 +301,7 @@ function renderOblique(w, a, gc, { width = 1200, height = 760, zScale = 300, til
       px[i + 2] = C.deep[2]
     }
   }
-  const rng = (n) => ((Math.sin(n * 12.9898) * 43758.5453) % 1 + 1) % 1
+  const rng = (n) => (((Math.sin(n * 12.9898) * 43758.5453) % 1) + 1) % 1
 
   for (let y = 0; y < s; y++) {
     for (let x = 0; x < s; x++) {
@@ -287,7 +310,10 @@ function renderOblique(w, a, gc, { width = 1200, height = 760, zScale = 300, til
       const wet = a.maxD > 0 ? Math.min(1, w.discharge[i] / (a.maxD * 0.12)) : 0
       let c = gc(h, a.slope[i], wet, i)
       if (h >= SEA) {
-        const lam = Math.max(0, a.nrm[i * 3] * L[0] + a.nrm[i * 3 + 1] * L[1] + a.nrm[i * 3 + 2] * L[2])
+        const lam = Math.max(
+          0,
+          a.nrm[i * 3] * L[0] + a.nrm[i * 3 + 1] * L[1] + a.nrm[i * 3 + 2] * L[2],
+        )
         const shade = 0.4 + 0.8 * lam
         c = [c[0] * shade, c[1] * shade, c[2] * shade]
       }
@@ -312,8 +338,7 @@ function renderOblique(w, a, gc, { width = 1200, height = 760, zScale = 300, til
       }
 
       // trees: gentle, low-to-mid ground with some moisture nearby
-      const treeOK =
-        h >= SEA + 0.015 && a.slope[i] < 0.03 && wet < 0.3 && rng(i * 1.7 + 3) < 0.055
+      const treeOK = h >= SEA + 0.015 && a.slope[i] < 0.03 && wet < 0.3 && rng(i * 1.7 + 3) < 0.055
       if (treeOK) {
         const tx = screenX + Math.floor(rng(i * 3.1) * colW)
         const ty = top
@@ -344,7 +369,12 @@ mkdirSync(PREVIEW, { recursive: true })
 
 const t0 = Date.now()
 console.log(`watershed: ${SIZE}x${SIZE}, ${STEPS} steps x ${DROPS} drops, seed ${SEED}`)
-const world = createWorld({ size: SIZE, seed: SEED, seaLevel: SEA, landFraction: +arg('land', 0.44) })
+const world = createWorld({
+  size: SIZE,
+  seed: SEED,
+  seaLevel: SEA,
+  landFraction: +arg('land', 0.44),
+})
 
 // Clear the offshore specks before spending any particles on them, so the
 // simulation's whole budget goes into the island the site is about.
@@ -362,7 +392,11 @@ process.stdout.write('\r')
 // Wind comes after the water: it works on what the rivers exposed, stripping
 // the loose cover off ground that stands into the prevailing wind and banking it
 // in the lee.
-const blown = wind(world, { particles: Math.round(SIZE * 18), seed: SEED + 2, params: { seaLevel: SEA } })
+const blown = wind(world, {
+  particles: Math.round(SIZE * 18),
+  seed: SEED + 2,
+  params: { seaLevel: SEA },
+})
 
 // Erosion calves off new specks of its own — cut them too.
 const prunedAfter = pruneIslands(world, SEA)
@@ -425,7 +459,8 @@ if (!flag('preview-only')) {
 
   // basins as a single greyscale channel — flat regions, so it compresses hard
   const basin = new Uint8Array(SIZE * SIZE)
-  for (let i = 0; i < SIZE * SIZE; i++) basin[i] = bas.label[i] < 0 ? 0 : Math.min(255, bas.label[i] + 1)
+  for (let i = 0; i < SIZE * SIZE; i++)
+    basin[i] = bas.label[i] < 0 ? 0 : Math.min(255, bas.label[i] + 1)
   writePNG(join(OUT, 'basin.png'), SIZE, SIZE, basin, 1)
 
   // surface.png: what the ground is made of, and where water stands on it.

@@ -383,6 +383,112 @@ export function createScene(
     }
   }
 
+  // --- settlements -----------------------------------------------------------
+  // The bake already scores every site — gentle ground, fresh water, low and
+  // near the coast — so a town is built the size the land deserves rather than
+  // every one getting the same dot. Roofs face the sun, which the bake fixed
+  // once and for all, so they need no lighting either.
+  let townMesh: THREE.InstancedMesh | null = null
+  {
+    const cell = PLANE / (size - 1)
+    const sites = world.meta.sites ?? []
+    type Hut = { gx: number; gy: number; s: number; roof: boolean }
+    const huts: Hut[] = []
+    let seed = 20260807
+    const rnd = () => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
+      return seed / 4294967296
+    }
+    for (const site of sites) {
+      const gx = site.x * size
+      const gy = site.y * size
+      const score = site.score ?? 0.5
+      // a good site earns a village; a marginal one gets a couple of roofs
+      const n = Math.round(6 + score * 22)
+      for (let k = 0; k < n; k++) {
+        // cluster tightly, and never on water or on the road itself
+        const a = rnd() * Math.PI * 2
+        const r = Math.sqrt(rnd()) * (3 + score * 7)
+        const hx = Math.round(gx + Math.cos(a) * r)
+        const hy = Math.round(gy + Math.sin(a) * r)
+        if (hx < 1 || hy < 1 || hx >= size - 1 || hy >= size - 1) continue
+        const i = hy * size + hx
+        if (world.height[i] < world.seaLevel + 0.004) continue
+        if (world.lake[i] > 0) continue
+        if (world.discharge[i] > 0.3) continue
+        // steep ground is not built on (same scale the forest uses)
+        if (surf.slope[i] > 0.045) continue
+        huts.push({ gx: hx, gy: hy, s: 0.7 + rnd() * 0.7, roof: rnd() > 0.35 })
+      }
+    }
+    if (huts.length) {
+      const body = new THREE.BoxGeometry(cell * 2.8, cell * 2.1, cell * 3.4)
+      body.translate(0, cell * 1.05, 0)
+      const roof = new THREE.ConeGeometry(cell * 2.5, cell * 1.9, 4)
+      roof.rotateY(Math.PI / 4)
+      roof.translate(0, cell * 3.0, 0)
+      const geo = mergeGeometries([body, roof])
+      const white = new Float32Array(geo.getAttribute('position').count * 3).fill(1)
+      geo.setAttribute('color', new THREE.BufferAttribute(white, 3))
+      townMesh = new THREE.InstancedMesh(
+        geo,
+        new THREE.MeshBasicMaterial({ vertexColors: true }),
+        huts.length,
+      )
+      townMesh.instanceMatrix.setUsage(THREE.StaticDrawUsage)
+      const m = new THREE.Matrix4()
+      const col = new THREE.Color()
+      const q = new THREE.Quaternion()
+      const scl = new THREE.Vector3()
+      const pos = new THREE.Vector3()
+      huts.forEach((h, k) => {
+        const gi = h.gy * size + h.gx
+        pos.copy(toWorld(h.gx, h.gy, world.height[gi], size))
+        q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), ((k % 8) / 8) * Math.PI)
+        scl.set(h.s, h.s, h.s)
+        m.compose(pos, q, scl)
+        townMesh!.setMatrixAt(k, m)
+        const shade = 0.55 + 0.55 * surf.ao[gi]
+        const c = h.roof
+          ? posterise([0.26 * shade, 0.15 * shade, 0.1 * shade])
+          : posterise([0.34 * shade, 0.3 * shade, 0.24 * shade])
+        col.setRGB(c[0], c[1], c[2])
+        townMesh!.setColorAt(k, col)
+      })
+      townMesh.instanceMatrix.needsUpdate = true
+      if (townMesh.instanceColor) townMesh.instanceColor.needsUpdate = true
+      townMesh.frustumCulled = false
+      scene.add(townMesh)
+    }
+  }
+
+  // --- boats -----------------------------------------------------------------
+  // Working the coast off the harbour towns. They move, which is the point: the
+  // island reads as inhabited the moment something on it is going somewhere.
+  const boats: { mesh: THREE.Mesh; angle: number; radius: number; speed: number; y: number }[] = []
+  {
+    const cell = PLANE / (size - 1)
+    const hull = new THREE.BoxGeometry(cell * 5, cell * 1.6, cell * 2)
+    const sail = new THREE.ConeGeometry(cell * 1.6, cell * 4.2, 3)
+    sail.rotateY(Math.PI / 2)
+    sail.translate(0, cell * 2.6, 0)
+    const geo = mergeGeometries([hull, sail])
+    const mat = new THREE.MeshBasicMaterial({ color: linear([0.5, 0.46, 0.4]) })
+    const seaY = world.seaLevel * HEIGHT
+    for (let k = 0; k < 5; k++) {
+      const mesh = new THREE.Mesh(geo, mat)
+      mesh.position.y = seaY + cell * 0.5
+      scene.add(mesh)
+      boats.push({
+        mesh,
+        angle: (k / 5) * Math.PI * 2,
+        radius: PLANE * (0.42 + (k % 3) * 0.05),
+        speed: 0.035 + (k % 4) * 0.008,
+        y: seaY + cell * 0.5,
+      })
+    }
+  }
+
   // --- trees -----------------------------------------------------------------
   // The reference is *forested* — a near-continuous canopy with bare ground
   // showing through only where the slope is too steep to hold it. Scattered
@@ -510,6 +616,16 @@ export function createScene(
 
     controls.update()
 
+    // Boats work their way round the island, rolling a little as they go. The
+    // only thing in this world that moves on its own — everything else was
+    // decided at build time and sits still.
+    for (const b of boats) {
+      b.angle += b.speed * dt
+      b.mesh.position.set(Math.cos(b.angle) * b.radius, b.y, Math.sin(b.angle) * b.radius)
+      b.mesh.rotation.y = -b.angle + Math.PI / 2
+      b.mesh.rotation.z = Math.sin(now * 0.0012 + b.angle * 3) * 0.05
+    }
+
     // Ride the dome along with the camera, or the far plane eats a hole in the
     // sky. Parked at the origin, its far side sits `radius + cameraDistance`
     // away — past `camera.far` as soon as the camera backs off the island — and
@@ -580,6 +696,10 @@ export function createScene(
       bedGeo.dispose()
       bedMat.dispose()
       lakeMesh?.geometry.dispose()
+      townMesh?.geometry.dispose()
+      ;(townMesh?.material as THREE.Material | undefined)?.dispose()
+      for (const b of boats) b.mesh.geometry.dispose()
+      ;(boats[0]?.mesh.material as THREE.Material | undefined)?.dispose()
       roadMesh?.geometry.dispose()
       ;(roadMesh?.material as THREE.Material | undefined)?.dispose()
       treeMesh?.geometry.dispose()
