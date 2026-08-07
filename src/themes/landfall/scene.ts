@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { Surface, World } from './world'
 import { forest, posterise, FRESH_LINEAR, ROAD_LINEAR, SEABED_LINEAR, SEA_LINEAR } from './world'
+import { createSky } from './sky'
 
 // landfall — the renderer (forked from watershed).
 //
@@ -61,6 +62,12 @@ export interface Scene {
   setFraming: (dx: number, dy: number) => void
 }
 
+/** How far above the ground the camera is always kept, in world units. */
+const CLEARANCE = PLANE * 0.045
+
+/** The shallowest angle a flight will arrive at, so towns are looked *down* on. */
+const MIN_ARRIVAL_PITCH = 0.34 // radians, ≈19°
+
 /** grid coords → world space */
 function toWorld(gx: number, gy: number, h: number, size: number): THREE.Vector3 {
   return new THREE.Vector3(
@@ -94,6 +101,17 @@ export function createScene(
   const N = Math.floor((size - 1) / detail) + 1
 
   const scene = new THREE.Scene()
+
+  /**
+   * Ground height in world space under a world-space point, never below the
+   * waterline — the camera should clear the sea as well as the land.
+   */
+  const groundAt = (x: number, z: number) => {
+    const gx = Math.round((x / PLANE + 0.5) * (world.size - 1))
+    const gy = Math.round((z / PLANE + 0.5) * (world.size - 1))
+    if (gx < 0 || gy < 0 || gx >= world.size || gy >= world.size) return world.seaLevel * HEIGHT
+    return Math.max(world.height[gy * world.size + gx], world.seaLevel) * HEIGHT
+  }
 
   // A flat clear colour leaves a hard seam where the ocean meets the sky.
   //
@@ -547,6 +565,9 @@ export function createScene(
     scene.add(treeMesh)
   }
 
+  // --- weather ---------------------------------------------------------------
+  const sky = createSky(scene, world, { plane: PLANE, height: HEIGHT, seed: 11 })
+
   // --- camera ----------------------------------------------------------------
   const camera = new THREE.PerspectiveCamera(46, 1, 0.5, PLANE * 6)
   camera.position.set(PLANE * 0.62, PLANE * 0.46, PLANE * 0.72)
@@ -616,6 +637,19 @@ export function createScene(
 
     controls.update()
 
+    // Never let the camera end up inside the island.
+    //
+    // The flight keeps whatever direction the camera already had and simply
+    // walks it in to the new distance — and the controls allow within seven
+    // degrees of horizontal — so travelling to a town on the far side of a ridge
+    // used to bury the viewer in it. Sampling the heightfield under the camera
+    // and holding it clear costs one lookup a frame and fixes dragging into a
+    // hillside as well, which had exactly the same effect.
+    const floorY = groundAt(camera.position.x, camera.position.z) + CLEARANCE
+    if (camera.position.y < floorY) camera.position.y = floorY
+
+    sky.update(dt, now)
+
     // Boats work their way round the island, rolling a little as they go. The
     // only thing in this world that moves on its own — everything else was
     // decided at build time and sits still.
@@ -682,6 +716,26 @@ export function createScene(
     }
   }
 
+  /**
+   * The direction to sit in relative to a target: the camera's current bearing,
+   * but never flatter than `MIN_ARRIVAL_PITCH`.
+   */
+  const arrivalDir = (target: THREE.Vector3) => {
+    const d = camera.position.clone().sub(target)
+    const flat = Math.hypot(d.x, d.z) || 1e-6
+    const pitch = Math.atan2(d.y, flat)
+    if (pitch >= MIN_ARRIVAL_PITCH) return d.normalize()
+    // keep the bearing, raise the eye
+    const len = d.length() || 1
+    const newFlat = Math.cos(MIN_ARRIVAL_PITCH) * len
+    const scale = newFlat / flat
+    return new THREE.Vector3(
+      d.x * scale,
+      Math.sin(MIN_ARRIVAL_PITCH) * len,
+      d.z * scale,
+    ).normalize()
+  }
+
   const projV = new THREE.Vector3()
   return {
     dispose() {
@@ -695,6 +749,7 @@ export function createScene(
       seaMat.dispose()
       bedGeo.dispose()
       bedMat.dispose()
+      sky.dispose()
       lakeMesh?.geometry.dispose()
       townMesh?.geometry.dispose()
       ;(townMesh?.material as THREE.Material | undefined)?.dispose()
@@ -725,11 +780,19 @@ export function createScene(
     flyTo(target, distance, instant = false) {
       if (instant || opts.reducedMotion) {
         controls.target.copy(target)
-        const dir = camera.position.clone().sub(controls.target).normalize()
-        camera.position.copy(target).addScaledVector(dir, distance)
+        camera.position.copy(target).addScaledVector(arrivalDir(target), distance)
+        const f = groundAt(camera.position.x, camera.position.z) + CLEARANCE
+        if (camera.position.y < f) camera.position.y = f
         flight.active = false
         return
       }
+      // Lift the approach if it is coming in flat. Keeping whatever angle the
+      // camera happened to have meant a town could be approached along the
+      // ground, which both looks like nothing and ends inside the next hill.
+      const dir = arrivalDir(target)
+      camera.position
+        .copy(controls.target)
+        .addScaledVector(dir, camera.position.distanceTo(controls.target))
       flight.fromT.copy(controls.target)
       flight.toT.copy(target)
       flight.fromD = camera.position.distanceTo(controls.target)

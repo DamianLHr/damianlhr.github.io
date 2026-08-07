@@ -214,9 +214,26 @@ export function Root({ content, route, navigate }: ThemeProps) {
         (r) => [`reg:${r.label}`, s.worldPointAt(r.gx, r.gy, r.h)] as [string, THREE.Vector3],
       ),
     ])
-    return s.onFrame(() => {
+    // Element sizes, measured once each. Reading offsetWidth per frame would
+    // force a layout on every marker, every frame; the labels only change size
+    // when the viewport does.
+    const sizes = new Map<string, { w: number; h: number }>()
+    const sizeOf = (id: string, el: HTMLElement) => {
+      let s2 = sizes.get(id)
+      if (!s2) {
+        s2 = { w: el.offsetWidth, h: el.offsetHeight }
+        if (s2.w > 0) sizes.set(id, s2)
+      }
+      return s2
+    }
+    const clearSizes = () => sizes.clear()
+    window.addEventListener('resize', clearSizes)
+
+    const stop = s.onFrame(() => {
       // panels are opaque glass; a marker underneath one is just noise
       const panel = document.querySelector('.lf-panel, .lf-hero')?.getBoundingClientRect()
+      const placeBoxes: { l: number; r: number; t: number; b: number }[] = []
+
       for (const [id, el] of markerRefs.current) {
         const pt = points.get(id)
         if (!pt) continue
@@ -234,8 +251,40 @@ export function Root({ content, route, navigate }: ThemeProps) {
         el.style.transform = `translate(${out.x}px, ${out.y}px) translate(-50%,-120%)`
         el.style.opacity = show ? '1' : '0'
         el.style.pointerEvents = show ? 'auto' : 'none'
+        // remember where the town labels landed — the province lettering has to
+        // keep out of their way
+        if (show && !id.startsWith('reg:')) {
+          const { w, h } = sizeOf(id, el)
+          placeBoxes.push({
+            l: out.x - w / 2,
+            r: out.x + w / 2,
+            t: out.y - h * 1.2,
+            b: out.y - h * 0.2,
+          })
+        }
+      }
+
+      // A province name is scenery; a town name is content. When the two collide
+      // — and at this scale "THE WORKING BASIN" lands straight through Eindhoven
+      // — the scenery is the one that gives way.
+      for (const [id, el] of markerRefs.current) {
+        if (!id.startsWith('reg:') || el.style.opacity === '0') continue
+        const { w, h } = sizeOf(id, el)
+        const m = el.style.transform.match(/translate\(([-\d.]+)px,\s*([-\d.]+)px\)/)
+        if (!m) continue
+        const x = parseFloat(m[1])
+        const y = parseFloat(m[2])
+        const box = { l: x - w / 2 - 10, r: x + w / 2 + 10, t: y - h * 1.2 - 6, b: y - h * 0.2 + 6 }
+        const clash = placeBoxes.some(
+          (p) => box.l < p.r && box.r > p.l && box.t < p.b && box.b > p.t,
+        )
+        if (clash) el.style.opacity = '0'
       }
     })
+    return () => {
+      window.removeEventListener('resize', clearSizes)
+      stop()
+    }
   }, [ready, layout])
 
   // --- fly the camera to the region a route belongs to ---
