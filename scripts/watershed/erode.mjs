@@ -201,6 +201,8 @@ export function createWorld({
   return {
     size,
     height,
+    /** repose per grade, in height-per-cell for *this* grid size */
+    repose: reposeTable(size),
     gravel,
     sand,
     silt,
@@ -225,10 +227,40 @@ const clampi = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v)
  * sorts the bed — coarse where the water is quick, fine where it slackens.
  */
 export const MATERIALS = {
-  gravel: { repose: 0.055, drop: 0.5, erodibility: 0.55 },
-  sand: { repose: 0.026, drop: 0.17, erodibility: 0.85 },
-  silt: { repose: 0.009, drop: 0.0, erodibility: 1.0 },
-  rock: { repose: 0.095, erodibility: 0.28 },
+  gravel: { angle: 36, drop: 0.5, erodibility: 0.55 },
+  sand: { angle: 32, drop: 0.17, erodibility: 0.85 },
+  silt: { angle: 20, drop: 0.0, erodibility: 1.0 },
+  // 52°, not the 65° of a fresh quarry face: this is worn upland, and measured,
+  // the steeper figure left channels twice as deeply cut.
+  rock: { angle: 62, erodibility: 0.28 },
+}
+
+/**
+ * The renderer's vertical exaggeration: HEIGHT / PLANE in themes/watershed/scene.ts.
+ * Repose has to be expressed against it, because a "height difference per cell"
+ * is only an angle once you know how wide a cell is and how tall the world is.
+ */
+export const WORLD_ASPECT = 21 / 100
+
+/**
+ * Angles of repose as height-difference-per-cell, for a given grid size.
+ *
+ * These were hardcoded, and hardcoded wrong: 0.055 for gravel reads as an 80°
+ * face at 512 cells, and silt at 0.009 is a 44° one. Loose sediment standing at
+ * 70-80° cannot relax, so every channel the water cut kept vertical walls and
+ * the uplands filled with slot canyons. Deriving them from real angles also
+ * makes the bake resolution-independent — the same constant meant a different
+ * angle at every size the tests ran at.
+ */
+export function reposeTable(size) {
+  const perCell = 1 / ((size - 1) * WORLD_ASPECT)
+  const at = (deg) => Math.tan((deg * Math.PI) / 180) * perCell
+  return {
+    gravel: at(MATERIALS.gravel.angle),
+    sand: at(MATERIALS.sand.angle),
+    silt: at(MATERIALS.silt.angle),
+    rock: at(MATERIALS.rock.angle),
+  }
 }
 
 /** Total loose cover above bedrock. */
@@ -247,7 +279,7 @@ export function topMaterial(w, i, cover = 0.0015) {
  * Rock only yields once everything loose above it is gone, and then grudgingly —
  * that difference is what leaves hard ribs standing out of worn ground.
  */
-function strip(w, i, amount) {
+function strip(w, i, amount, rockErodibility = MATERIALS.rock.erodibility) {
   let want = amount
   let got = 0
   for (const grade of ['silt', 'sand', 'gravel']) {
@@ -259,7 +291,7 @@ function strip(w, i, amount) {
     got += take
     want -= take * MATERIALS[grade].erodibility
   }
-  if (want > 0) got += want * MATERIALS.rock.erodibility
+  if (want > 0) got += want * rockErodibility
   w.height[i] -= got
   return got
 }
@@ -305,18 +337,41 @@ function cascade(w, x, y, P) {
   neighbours.sort((a, b) => w.height[a] - w.height[b])
 
   for (const j of neighbours) {
-    if (w.height[j] >= w.height[i]) break
-    const grade = topMaterial(w, i)
-    if (grade === 'rock') continue // bedrock does not flow; it stands
-    const diff = w.height[i] - w.height[j]
-    const excess = diff - MATERIALS[grade].repose
+    // Both directions. This used to break out as soon as a neighbour stood
+    // higher than the centre, so material could only ever be pushed *out* of a
+    // cell and never pulled *down into* one — which meant a channel's own walls
+    // could never collapse into it, however far past their angle of repose they
+    // stood. That is what cut slot canyons through the uplands: the water dug,
+    // and nothing was permitted to fall back in behind it.
+    const [hi, lo] = w.height[j] > w.height[i] ? [j, i] : [i, j]
+    if (w.height[hi] <= w.height[lo]) continue
+    const grade = topMaterial(w, hi)
+    const diff = w.height[hi] - w.height[lo]
+
+    if (grade === 'rock') {
+      // Bedrock shears too — slowly, and only past a much steeper angle, but it
+      // has to give at all. Skipping it entirely meant that the moment a
+      // channel cut down to rock its walls could never relax, so every river
+      // sawed a slot canyon through the uplands and left it standing. What
+      // comes away arrives below as scree.
+      const excess = diff - w.repose.rock
+      if (excess <= 0) continue
+      const transfer = ((P.settling * excess) / 2) * P.rockCascadeRate
+      if (transfer <= 0) continue
+      w.height[hi] -= transfer
+      w.gravel[lo] += transfer
+      w.height[lo] += transfer
+      continue
+    }
+
+    const excess = diff - w.repose[grade]
     if (excess <= 0) continue
-    const transfer = Math.min(w[grade][i], (P.settling * excess) / 2)
+    const transfer = Math.min(w[grade][hi], (P.settling * excess) / 2)
     if (transfer <= 0) continue
-    w[grade][i] -= transfer
-    w.height[i] -= transfer
-    w[grade][j] += transfer
-    w.height[j] += transfer
+    w[grade][hi] -= transfer
+    w.height[hi] -= transfer
+    w[grade][lo] += transfer
+    w.height[lo] += transfer
   }
 }
 
@@ -376,8 +431,16 @@ export const DEFAULTS = {
    *  is what levels valley floors into floodplains instead of leaving the
    *  lumpy fall line the sediment was dropped on. */
   settling: 0.8,
-  /** Bedrock creeps too, just far more slowly and at a much steeper angle. Run
-   *  as an occasional sweep, since nothing about it is local to a particle. */
+  /** How much of the excess over bedrock's repose shears per cascade. Far
+   *  slower than loose material — that gap is what keeps cliffs — but not zero,
+   *  or channels cut slot canyons that stand forever. */
+  rockCascadeRate: 0.45,
+  /** How readily running water cuts bedrock. This is the control on how deep a
+   *  valley gets: the loose mantle is thin, so a channel reaches rock quickly
+   *  and everything after that is set by this number. */
+  rockErodibility: MATERIALS.rock.erodibility,
+  /** Bedrock creeps as an occasional whole-map sweep as well, which catches
+   *  faces no particle happens to pass. */
   thermalRate: 0.25,
   thermalEvery: 12,
   // wind (see `wind()`) — a light pass, run after the water has done its work
@@ -475,7 +538,7 @@ function descend(w, px, py, P) {
     // then slow against bedrock, so hard ground stands out as ribs and cliffs
     // rather than everything wearing down together.
     const change = effD * cDiff
-    if (change > 0) sediment += strip(w, i, change)
+    if (change > 0) sediment += strip(w, i, change, P.rockErodibility)
     else {
       const add = -change
       lay(w, i, add, dCap)
@@ -520,7 +583,7 @@ function thermal(w, P, iterations = 1) {
   const h = w.height
   const delta = new Float32Array(s * s)
   const gravelDelta = new Float32Array(s * s)
-  const repose = MATERIALS.rock.repose
+  const repose = w.repose.rock
   for (let it = 0; it < iterations; it++) {
     delta.fill(0)
     gravelDelta.fill(0)

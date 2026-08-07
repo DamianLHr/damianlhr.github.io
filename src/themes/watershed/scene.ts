@@ -257,7 +257,7 @@ export function createScene(
       // Only a real channel gets a surface. The discharge map is normalised
       // against a quarter of the run's peak, so a low bar here puts water on
       // every trickle and the hillsides come out sheeted in pale blue.
-      if (world.discharge[i] > 0.34) riverCells.push(i)
+      if (world.discharge[i] > 0.2) riverCells.push(i)
     }
     for (const i of riverCells) cells.push(i)
     if (cells.length > 0) {
